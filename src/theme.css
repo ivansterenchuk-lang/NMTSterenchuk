@@ -1,0 +1,176 @@
+@import url('https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap');
+
+:root {
+  color-scheme: light !important;
+  --paper: #f6f8fd;
+  --card: #ffffff;
+  --soft: #eef2fb;
+  --soft-2: #e3e9f7;
+  --line: #d7def0;
+  --line-2: #b7c3e3;
+
+  --ink: #0f1b3d;
+  --ink-2: #3b4869;
+  --ink-3: #5f6b8c;
+  --ink-4: #8791ad;
+
+  --blue: #2545d6;
+  --blue-2: #1b36b0;
+  --blue-soft: #e6ebff;
+  --blue-soft-2: #d3dcff;
+  --blue-line: #b9c7fb;
+
+  --sun: #ffd23f;
+
+  --green: #0f8a4f;
+  --green-solid: #14a05d;
+  --green-2: #0e8049;
+  --green-soft: #dcf5e7;
+  --green-line: #9fd8b7;
+
+  --red: #c62b46;
+  --red-solid: #d93a55;
+  --red-soft: #fde4e8;
+  --red-line: #f2a8b6;
+
+  --amber: #a86400;
+  --amber-solid: #d98a00;
+  --amber-soft: #fff0cc;
+  --amber-line: #ecc56e;
+
+  --sky: #1b6fb8;
+  --sky-soft: #e1f0fc;
+  --sky-line: #9cc8ec;
+
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+}
+
+::selection { background: var(--sun); color: var(--ink); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+button:not([class*="bg-"]) { background: none !important; }
+
+.font-sans, body { font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif !important; }
+h1, h2, h3 {
+  font-family: 'Unbounded', 'Onest', system-ui, sans-serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+}
+h2 { font-size: 1.3rem !important; line-height: 1.35 !important; }
+
+[class~="min-h-screen"][class~="bg-slate-900"] {
+  background-color: var(--paper) !important;
+  background-image:
+    linear-gradient(rgba(37, 69, 214, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 69, 214, 0.07) 1px, transparent 1px) !important;
+  background-size: 22px 22px !important;
+}
+
+[class~="bg-slate-950"] { background-color: var(--card) !important; }
+[class~="bg-slate-900"], [class~="bg-slate-900/80"] { background-color: var(--soft) !important; }
+[class~="bg-slate-900/50"] { background-color: #f3f6fd !important; }
+[class~="bg-slate-800"] { background-color: var(--soft-2) !important; }
+[class~="bg-slate-950/80"] { background-color: rgba(15, 27, 61, 0.38) !important; }
+[class~="max-w-4xl"][class~="bg-slate-900"] { background-color: #f7f9fe !important; }
+
+[class~="bg-indigo-950"], [class~="bg-indigo-600/20"] { background-color: var(--blue-soft) !important; }
+[class~="bg-emerald-950"], [class~="bg-emerald-600/20"] { background-color: var(--green-soft) !important; }
+[class~="bg-rose-950"], [class~="bg-rose-600/20"] { background-color: var(--red-soft) !important; }
+[class~="bg-blue-950"], [class~="bg-blue-600/20"] { background-color: var(--sky-soft) !important; }
+[class~="bg-amber-950"], [class~="bg-amber-950/40"] { background-color: var(--amber-soft) !important; }
+
+[class~="bg-indigo-600"], [class~="bg-indigo-500"] { background-color: var(--blue) !important; }
+[class~="bg-emerald-600"] { background-color: var(--green-solid) !important; }
+[class~="bg-amber-600"] { background-color: var(--amber-solid) !important; }
+[class~="bg-purple-600"] { background-color: var(--sun) !important; }
+
+[class~="hover:bg-slate-900"]:hover,
+[class~="hover:bg-slate-900/80"]:hover,
+[class~="hover:bg-slate-900/50"]:hover,
+[class~="hover:bg-slate-900/40"]:hover { background-color: #e9effc !important; }
+[class~="hover:bg-slate-800"]:hover,
+[class~="hover:bg-slate-700"]:hover { background-color: var(--soft-2) !important; }
+[class~="hover:bg-indigo-500"]:hover { background-color: var(--blue-2) !important; }
+[class~="hover:bg-emerald-500"]:hover { background-color: var(--green-2) !important; }
+[class~="hover:bg-indigo-600/30"]:hover { background-color: var(--blue-soft-2) !important; }
+[class~="hover:bg-rose-900"]:hover { background-color: #fbd0d8 !important; }
+[class~="hover:bg-indigo-600"]:hover { background-color: var(--blue) !important; }
+[class~="hover:bg-emerald-600"]:hover { background-color: var(--green-solid) !important; }
+[class~="hover:bg-blue-600"]:hover { background-color: var(--sky) !important; }
+[class~="hover:bg-rose-600"]:hover { background-color: var(--red-solid) !important; }
+
+[class~="border-slate-800"], [class~="border-slate-800/60"], [class~="border-slate-800/40"] { border-color: var(--line) !important; }
+[class~="border-slate-700"], [class~="border-slate-600"] { border-color: var(--line-2) !important; }
+[class~="hover:border-slate-600"]:hover, [class~="hover:border-slate-700"]:hover { border-color: var(--line-2) !important; }
+[class~="border-indigo-800"], [class~="border-indigo-800/60"] { border-color: var(--blue-line) !important; }
+[class~="border-indigo-500/40"], [class~="hover:border-indigo-500/50"]:hover { border-color: rgba(37, 69, 214, 0.4) !important; }
+[class~="border-indigo-500"], [class~="border-indigo-400"], [class~="hover:border-indigo-400"]:hover { border-color: var(--blue) !important; }
+[class~="border-emerald-800"], [class~="border-emerald-800/50"], [class~="border-emerald-800/80"] { border-color: var(--green-line) !important; }
+[class~="border-rose-800"], [class~="border-rose-800/80"] { border-color: var(--red-line) !important; }
+[class~="border-blue-800"] { border-color: var(--sky-line) !important; }
+[class~="border-amber-500"] { border-color: #e0a21a !important; }
+[class~="border-amber-500/30"] { border-color: var(--amber-line) !important; }
+[class~="divide-slate-800"] > *, [class~="divide-slate-800/60"] > * { border-color: var(--line) !important; }
+
+[class~="focus:border-indigo-500"]:focus {
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 3px rgba(37, 69, 214, 0.15) !important;
+}
+[class~="focus:border-emerald-500"]:focus {
+  border-color: var(--green-solid) !important;
+  box-shadow: 0 0 0 3px rgba(20, 160, 93, 0.18) !important;
+}
+
+[class~="text-white"], [class~="text-slate-100"], [class~="text-slate-200"] { color: var(--ink) !important; }
+[class~="text-slate-300"] { color: var(--ink-2) !important; }
+[class~="text-slate-400"] { color: var(--ink-3) !important; }
+[class~="text-slate-500"] { color: var(--ink-4) !important; }
+[class~="text-slate-600"] { color: var(--line-2) !important; }
+[class~="text-indigo-300"], [class~="text-indigo-400"] { color: var(--blue) !important; }
+[class~="text-emerald-300"], [class~="text-emerald-400"] { color: var(--green) !important; }
+[class~="text-rose-300"], [class~="text-rose-400"], [class~="hover:text-rose-400"]:hover { color: var(--red) !important; }
+[class~="text-amber-400"] { color: var(--amber) !important; }
+[class~="text-blue-300"], [class~="text-blue-400"] { color: var(--sky) !important; }
+[class~="hover:text-white"]:hover { color: var(--ink) !important; }
+
+[class~="text-white"][class~="bg-indigo-600"],
+[class~="text-white"][class~="bg-indigo-500"],
+[class~="text-white"][class~="bg-emerald-600"],
+[class~="text-white"][class~="bg-amber-600"],
+[class~="hover:text-white"][class*="hover:bg-"]:hover { color: #ffffff !important; }
+
+[class~="shadow-xl"], [class~="shadow-2xl"], [class~="shadow-lg"], [class~="shadow-md"] {
+  box-shadow: 0 1px 2px rgba(15, 27, 61, 0.05), 0 14px 30px -20px rgba(37, 69, 214, 0.4) !important;
+}
+[class~="shadow-inner"] { box-shadow: none !important; }
+
+header { box-shadow: 0 1px 0 var(--line), 0 12px 28px -22px rgba(37, 69, 214, 0.5) !important; }
+
+nav button[class~="border-b-2"] {
+  border-bottom-width: 4px !important;
+  border-color: var(--sun) !important;
+}
+
+[class~="bg-gradient-to-tr"] {
+  background-image: none !important;
+  background-color: var(--sun) !important;
+  color: var(--ink) !important;
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink) !important;
+}
+[class~="bg-clip-text"] {
+  background-image: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  color: var(--ink) !important;
+  -webkit-text-fill-color: var(--ink) !important;
+  font-family: 'Unbounded', 'Onest', sans-serif !important;
+  font-weight: 700 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ping { animation: none !important; }
+}
