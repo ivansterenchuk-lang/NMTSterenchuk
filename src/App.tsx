@@ -29,7 +29,7 @@ import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import CommunityTestViewModal from './components/CommunityTestViewModal';
 import LandingPage from './components/LandingPage';
-import { LogOut } from 'lucide-react'; // Іконка для кнопки виходу
+import { LogOut } from 'lucide-react';
 
 import { mockSession } from './lib/mockData';
 
@@ -76,7 +76,6 @@ export default function App() {
   const me = accounts.find(a => a.id === CURRENT_TEACHER_ID);
   const ent = getEntitlement(me, settings);
 
-  // Якщо є параметр join - відразу пускаємо як учня. Якщо ні - показуємо титульну сторінку.
   const [showLanding, setShowLanding] = useState<boolean>(() => !readJoinParam());
   const [userRole, setUserRole] = useState<'student' | 'teacher'>(() => (readJoinParam() ? 'student' : 'teacher'));
   const [activeTab, setActiveTab] = useState<Tab>('sessions');
@@ -120,7 +119,6 @@ export default function App() {
   const [userInfo] = useState({ firstName: 'Іван', lastName: 'Стеренчук', email: 'ivansterenchuk@gmail.com' });
   const teacherFullName = `${userInfo.firstName} ${userInfo.lastName}`;
   
-  // Ініціалізуємо порожнім масивом, дані прийдуть з Supabase
   const [classes, setClasses] = useState<ClassItem[]>([]);
   
   const [studentName, setStudentName] = useState<string>(() => { try { return localStorage.getItem('nmt-student-name') ?? ''; } catch { return ''; } });
@@ -651,7 +649,15 @@ export default function App() {
                     </div>
                   )}
                   {activeTab === 'classes' && (<TeacherClasses classes={classes} setClasses={setClasses} teacherName={teacherFullName} libraryGroups={libraryGroups} />)}
-                  {activeTab === 'board' && (<div className="space-y-4"><h2 className="text-2xl font-black text-slate-900">Інтерактивна дошка</h2><p className="text-xs text-slate-500">Демонструйте екран або малюйте разом з учнями в реальному часі.</p><Whiteboard roomId="classroom-1" studentName={studentFullName} /></div>)}
+                  
+                  {activeTab === 'board' && (
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-black text-slate-900">Інтерактивна дошка</h2>
+                      <p className="text-xs text-slate-500">Демонструйте екран або малюйте разом з учнями в реальному часі.</p>
+                      <Whiteboard studentName={studentFullName} isTeacher={userRole === 'teacher'} />
+                    </div>
+                  )}
+                  
                   {activeTab === 'profile' && (<div className="bg-white p-8 rounded-2xl border border-slate-200 space-y-6 max-w-2xl shadow-sm"><div className="flex items-center space-x-6"><div className="w-20 h-20 bg-gradient-to-tr from-teal-500 to-emerald-400 text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-md">{userInfo.firstName.charAt(0)}</div><div><h2 className="text-2xl font-bold text-slate-900">{teacherFullName}</h2><p className="text-sm text-slate-500">{userInfo.email}</p><span className={`inline-block mt-2 text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200`}>PRO Тариф</span></div></div><div className="rounded-xl border border-slate-200 bg-slate-50 p-6 space-y-4"><h3 className="text-lg font-bold text-slate-900">Ваш тариф: PRO</h3><p className="text-sm text-slate-500">Доступні всі функції, включно з PDF.</p></div></div>)}
                 </>
               )}

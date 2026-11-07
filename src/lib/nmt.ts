@@ -68,3 +68,4 @@ export const maxPoints = (q: Question): number => {
   if (q.type === 'sequence' && q.sequenceItems) return q.sequenceItems.length;
   return 1; // За замовчуванням 1 бал
 };
+export type Answer = any;
