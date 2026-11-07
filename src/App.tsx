@@ -28,7 +28,8 @@ import StudentView from './components/StudentView';
 import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import CommunityTestViewModal from './components/CommunityTestViewModal';
-import LandingPage from './components/LandingPage'; // <--- ДОДАНО
+import LandingPage from './components/LandingPage';
+import { LogOut } from 'lucide-react'; // Іконка для кнопки виходу
 
 import { mockSession } from './lib/mockData';
 
@@ -156,7 +157,6 @@ export default function App() {
     } catch { return [mockSession as any]; }
   });
   
-  // ЗМІНЕНО: Тепер це реальні дані з бази
   const [liveStudentsData, setLiveStudentsData] = useState<StudentResult[]>([]);
 
   // ЗАВАНТАЖЕННЯ КЛАСІВ З БАЗИ ПРИ СТАРТІ
@@ -167,7 +167,6 @@ export default function App() {
       if (isMounted && dbClasses.length > 0) {
         setClasses(dbClasses);
       } else if (isMounted && dbClasses.length === 0) {
-        // Якщо база порожня, беремо локальні дані для міграції
         const local = loadClasses();
         if (local.length > 0) setClasses(local);
       }
@@ -176,7 +175,7 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // ЗБЕРЕЖЕННЯ СЕСІЙ У LOCALSTORAGE (поки що залишаємо для сесій)
+  // ЗБЕРЕЖЕННЯ СЕСІЙ У LOCALSTORAGE
   useEffect(() => { localStorage.setItem('nmt-sessions-local', JSON.stringify(activeSessions)); }, [activeSessions]);
 
   // РЕАЛЬНИЙ МОНІТОРИНГ СЕСІЙ (Опитування кожні 5 сек)
@@ -334,7 +333,7 @@ export default function App() {
         onSelectRole={(role) => {
           setUserRole(role);
           setShowLanding(false);
-          if (role === 'student') setActiveTab('classes'); // Учням одразу відкриваємо класи
+          if (role === 'student') setActiveTab('classes'); 
         }} 
       />
     );
@@ -356,9 +355,33 @@ export default function App() {
             {userRole === 'teacher' && (<nav className="hidden md:flex items-center space-x-4 text-xs font-bold tracking-wider">{TEACHER_TABS.map(([t, label]) => (<button key={t} onClick={() => goTab(t)} className={navCls(t)}>{label}</button>))}</nav>)}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
-            {userRole === 'teacher' && (<><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span><input ref={searchRef} value={globalQuery} onChange={e => setGlobalQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runGlobalSearch(); }} placeholder="Код сесії або слова… (Ctrl+K)" className="w-56 xl:w-72 pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:border-teal-500 focus:outline-none transition" /></div><AccessBadge /></>)}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold"><button onClick={() => setUserRole('student')} className={`px-3 py-1.5 rounded-lg transition ${userRole === 'student' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>Учень</button><button onClick={() => setUserRole('teacher')} className={`px-3 py-1.5 rounded-lg transition ${userRole === 'teacher' ? 'bg-teal-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>Вчитель</button></div>
-            <div className="flex items-center space-x-2.5 cursor-pointer bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 transition" onClick={() => { if (userRole === 'teacher') goTab('profile'); }}><div className="w-7 h-7 bg-teal-600 text-white rounded-lg flex items-center justify-center font-bold text-xs shadow-sm">{displayFirstName.charAt(0)}</div><span className="text-xs font-bold text-slate-800">{displayFirstName}</span></div>
+            {userRole === 'teacher' && (
+              <>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+                  <input ref={searchRef} value={globalQuery} onChange={e => setGlobalQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') runGlobalSearch(); }} placeholder="Код сесії або слова… (Ctrl+K)" className="w-56 xl:w-72 pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:border-teal-500 focus:outline-none transition" />
+                </div>
+                <AccessBadge />
+              </>
+            )}
+            
+            {/* КНОПКА ВИХОДУ */}
+            <button 
+              onClick={() => {
+                setShowLanding(true);
+                setSelectedSessionForLive(null);
+                setSelectedFolder(null);
+                setActiveTab('sessions');
+              }} 
+              className="px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+            >
+              <LogOut className="w-4 h-4" /> Вийти
+            </button>
+
+            <div className="flex items-center space-x-2.5 cursor-pointer bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 transition" onClick={() => { if (userRole === 'teacher') goTab('profile'); }}>
+              <div className="w-7 h-7 bg-teal-600 text-white rounded-lg flex items-center justify-center font-bold text-xs shadow-sm">{displayFirstName.charAt(0)}</div>
+              <span className="text-xs font-bold text-slate-800">{displayFirstName}</span>
+            </div>
           </div>
         </header>
 
