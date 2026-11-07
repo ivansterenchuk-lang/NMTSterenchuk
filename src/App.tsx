@@ -28,6 +28,7 @@ import StudentView from './components/StudentView';
 import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import CommunityTestViewModal from './components/CommunityTestViewModal';
+import LandingPage from './components/LandingPage'; // <--- ДОДАНО
 
 import { mockSession } from './lib/mockData';
 
@@ -74,6 +75,8 @@ export default function App() {
   const me = accounts.find(a => a.id === CURRENT_TEACHER_ID);
   const ent = getEntitlement(me, settings);
 
+  // Якщо є параметр join - відразу пускаємо як учня. Якщо ні - показуємо титульну сторінку.
+  const [showLanding, setShowLanding] = useState<boolean>(() => !readJoinParam());
   const [userRole, setUserRole] = useState<'student' | 'teacher'>(() => (readJoinParam() ? 'student' : 'teacher'));
   const [activeTab, setActiveTab] = useState<Tab>('sessions');
   const [selectedFolder, setSelectedFolder] = useState<LibraryItem | null>(null);
@@ -322,6 +325,19 @@ export default function App() {
   if (route === '#admin' || route.startsWith('#admin/')) {
     if (!adminAuthed) return <AdminLogin onSuccess={() => { setAdminSession(true); setAdminAuthed(true); }} onExit={exitAdmin} />;
     return <AdminConsole accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} library={libraryItems.map(i => ({ id: i.id, title: i.title, type: i.type, count: i.questions?.length ?? 0 }))} onDeleteLibrary={id => setLibraryItems(prev => prev.filter(i => i.id !== id))} onLogout={() => { setAdminSession(false); setAdminAuthed(false); exitAdmin(); }} onExit={exitAdmin} />;
+  }
+
+  // ЯКЩО ПОКАЗУЄМО ТИТУЛЬНУ СТОРІНКУ
+  if (showLanding) {
+    return (
+      <LandingPage 
+        onSelectRole={(role) => {
+          setUserRole(role);
+          setShowLanding(false);
+          if (role === 'student') setActiveTab('classes'); // Учням одразу відкриваємо класи
+        }} 
+      />
+    );
   }
 
   const displayFirstName = userRole === 'student' ? splitName(studentFullName).firstName : userInfo.firstName;
