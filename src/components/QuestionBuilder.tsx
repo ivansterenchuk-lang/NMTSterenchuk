@@ -50,20 +50,17 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
     initial?.sequenceItems?.map((x: any) => typeof x === 'string' ? { text: x } : x) ?? [{ text: '' }, { text: '' }, { text: '' }, { text: '' }]
   );
 
-  // --- Допоміжна функція для завантаження файлів ---
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (base64: string) => void) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 500 * 1024) { // 500 KB ліміт
-      alert('Файл занадто великий! Будь ласка, оберіть зображення до 500 КБ.');
-      return;
+  // --- ФУНКЦІЯ ДОДАВАННЯ КАРТИНКИ ЗА ПОСИЛАННЯМ ---
+  const promptForImage = (callback: (url: string) => void) => {
+    const url = window.prompt('Вставте URL-адресу зображення (має починатися з http або https):');
+    if (url && url.trim() && (url.trim().startsWith('http://') || url.trim().startsWith('https://'))) {
+      callback(url.trim());
+    } else if (url && url.trim()) {
+      alert('Неправильний формат посилання. Воно має починатися з http:// або https://');
     }
-    const reader = new FileReader();
-    reader.onloadend = () => setter(reader.result as string);
-    reader.readAsDataURL(file);
   };
 
-  // --- Обробники ---
+  // --- ОБРОБНИКИ ---
   const updateOption = (index: number, val: string) => {
     const newOpts = [...options];
     newOpts[index].text = val;
@@ -188,15 +185,19 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
             <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Введіть текст завдання..." className={`${inp} resize-none`} />
             
             <div className="flex items-center gap-4 pt-2">
-              <label className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg cursor-pointer hover:bg-slate-100 transition text-sm text-slate-700 font-bold">
+              <button 
+                type="button"
+                onClick={() => promptForImage(setImage)}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg cursor-pointer hover:bg-slate-100 transition text-sm text-slate-700 font-bold shadow-sm"
+              >
                 <ImageIcon className="w-4 h-4 text-teal-600" />
                 Додати фото до питання
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, setImage)} />
-              </label>
+              </button>
+              
               {image && (
                 <div className="relative">
                   <img src={image} alt="Preview" className="h-16 w-16 object-cover rounded-lg border border-slate-300 shadow-sm" />
-                  <button onClick={() => setImage(undefined)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"><X className="w-3 h-3" /></button>
+                  <button onClick={() => setImage(undefined)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 cursor-pointer"><X className="w-3 h-3" /></button>
                 </div>
               )}
             </div>
@@ -228,15 +229,18 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                     {opt.image ? (
                       <div className="relative">
                         <img src={opt.image} alt="Opt" className="h-10 w-10 object-cover rounded border border-slate-300" />
-                        <button onClick={() => updateOptionImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-sm hover:bg-red-600"><X className="w-2.5 h-2.5" /></button>
+                        <button onClick={() => updateOptionImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-sm hover:bg-red-600 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                       </div>
                     ) : (
-                      <label className="cursor-pointer p-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-teal-600 transition">
+                      <button 
+                        onClick={() => promptForImage((url) => updateOptionImage(i, url))} 
+                        className="p-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-teal-600 transition shadow-sm cursor-pointer"
+                        title="Додати фото за посиланням"
+                      >
                         <ImageIcon className="w-5 h-5" />
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, (base64) => updateOptionImage(i, base64))} />
-                      </label>
+                      </button>
                     )}
-                    <button onClick={() => setOptions(options.filter((_, k) => k !== i))} disabled={options.length <= 2} className="p-2 text-slate-400 hover:text-red-600 transition cursor-pointer disabled:opacity-30 bg-white rounded-lg border border-slate-300 hover:bg-red-50"><Trash2 className="w-5 h-5" /></button>
+                    <button onClick={() => setOptions(options.filter((_, k) => k !== i))} disabled={options.length <= 2} className="p-2 text-slate-400 hover:text-red-600 transition cursor-pointer disabled:opacity-30 bg-white rounded-lg border border-slate-300 hover:bg-red-50 shadow-sm"><Trash2 className="w-5 h-5" /></button>
                   </div>
                 </div>
               ))}
@@ -268,13 +272,12 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                         {item.image ? (
                           <div className="relative">
                             <img src={item.image} className="h-10 w-10 object-cover rounded border border-slate-300" />
-                            <button onClick={() => updateLeftImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"><X className="w-2.5 h-2.5" /></button>
+                            <button onClick={() => updateLeftImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                           </div>
                         ) : (
-                          <label className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1">
+                          <button onClick={() => promptForImage((url) => updateLeftImage(i, url))} className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1 font-bold">
                             <ImageIcon className="w-3.5 h-3.5" /> Додати фото
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, (base64) => updateLeftImage(i, base64))} />
-                          </label>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -290,19 +293,18 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-black text-slate-500 w-4">{String.fromCharCode(65 + i)}</span>
                         <input value={item.text} onChange={e => updateRight(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Варіант ${String.fromCharCode(65 + i)}`} />
-                        <button onClick={() => setRightCol(rightCol.filter((_, k) => k !== i))} disabled={rightCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => setRightCol(rightCol.filter((_, k) => k !== i))} disabled={rightCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                       <div className="flex items-center gap-2 pl-6">
                         {item.image ? (
                           <div className="relative">
                             <img src={item.image} className="h-10 w-10 object-cover rounded border border-slate-300" />
-                            <button onClick={() => updateRightImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"><X className="w-2.5 h-2.5" /></button>
+                            <button onClick={() => updateRightImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                           </div>
                         ) : (
-                          <label className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1">
+                          <button onClick={() => promptForImage((url) => updateRightImage(i, url))} className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1 font-bold">
                             <ImageIcon className="w-3.5 h-3.5" /> Додати фото
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, (base64) => updateRightImage(i, base64))} />
-                          </label>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -328,19 +330,18 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                     {item.image ? (
                       <div className="relative">
                         <img src={item.image} className="h-10 w-10 object-cover rounded border border-slate-300" />
-                        <button onClick={() => updateSeqImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"><X className="w-2.5 h-2.5" /></button>
+                        <button onClick={() => updateSeqImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                       </div>
                     ) : (
-                      <label className="cursor-pointer p-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-teal-600 transition">
+                      <button onClick={() => promptForImage((url) => updateSeqImage(i, url))} className="p-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-teal-600 transition shadow-sm cursor-pointer" title="Додати фото за посиланням">
                         <ImageIcon className="w-5 h-5" />
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, (base64) => updateSeqImage(i, base64))} />
-                      </label>
+                      </button>
                     )}
                     <div className="flex flex-col gap-0.5">
-                      <button onClick={() => moveSeq(i, -1)} disabled={i === 0} className="p-1 text-slate-500 hover:text-teal-700 disabled:opacity-30 bg-white rounded border border-slate-300"><ArrowUp className="w-3 h-3" /></button>
-                      <button onClick={() => moveSeq(i, 1)} disabled={i === sequence.length - 1} className="p-1 text-slate-500 hover:text-teal-700 disabled:opacity-30 bg-white rounded border border-slate-300"><ArrowDown className="w-3 h-3" /></button>
+                      <button onClick={() => moveSeq(i, -1)} disabled={i === 0} className="p-1 text-slate-500 hover:text-teal-700 disabled:opacity-30 bg-white rounded border border-slate-300 cursor-pointer"><ArrowUp className="w-3 h-3" /></button>
+                      <button onClick={() => moveSeq(i, 1)} disabled={i === sequence.length - 1} className="p-1 text-slate-500 hover:text-teal-700 disabled:opacity-30 bg-white rounded border border-slate-300 cursor-pointer"><ArrowDown className="w-3 h-3" /></button>
                     </div>
-                    <button onClick={() => setSequence(sequence.filter((_, k) => k !== i))} disabled={sequence.length <= 2} className="p-2 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300"><Trash2 className="w-5 h-5" /></button>
+                    <button onClick={() => setSequence(sequence.filter((_, k) => k !== i))} disabled={sequence.length <= 2} className="p-2 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 hover:bg-red-50 cursor-pointer"><Trash2 className="w-5 h-5" /></button>
                   </div>
                 </div>
               ))}
