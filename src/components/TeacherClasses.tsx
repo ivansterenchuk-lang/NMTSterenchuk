@@ -3,7 +3,6 @@ import {
   avgTwelve,
   fmtDate,
   generateCode,
-  joinLink,
   allCodes,
   subOf,
   type Assignment,
@@ -49,6 +48,11 @@ const bands = ['bg-teal-500', 'bg-emerald-500', 'bg-blue-500'];
 
 const inp = 'w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition';
 
+// ВИПРАВЛЕНО: Надійна генерація посилання, яка завжди працює на Vercel
+const getJoinLink = (code: string) => {
+  return `${window.location.origin}/?join=${code}`;
+};
+
 export default function TeacherClasses({ classes, setClasses, teacherName, libraryGroups }: Props) {
   const { ent } = useAccess();
 
@@ -78,7 +82,7 @@ export default function TeacherClasses({ classes, setClasses, teacherName, libra
   };
 
   const share = async (c: ClassItem) => {
-    const url = joinLink(c.code);
+    const url = getJoinLink(c.code);
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share({
@@ -323,7 +327,7 @@ export default function TeacherClasses({ classes, setClasses, teacherName, libra
     );
   }
 
-  const link = joinLink(cls.code);
+  const link = getJoinLink(cls.code); // ВИПРАВЛЕНО
   const allSubs = (cls.assignments || []).flatMap(a => (a.submissions || []).filter(s => (cls.students || []).some(st => st.id === s.studentId)));
   const classAvg = avgTwelve(allSubs);
   const selectedGroup = libraryGroups.find(g => g.id === asg.groupId);
@@ -348,7 +352,7 @@ export default function TeacherClasses({ classes, setClasses, teacherName, libra
 
       <div className="grid lg:grid-cols-[20rem_1fr] gap-6 items-start">
         <aside className="space-y-4 lg:sticky lg:top-6">
-          {/* ОНОВЛЕНИЙ БЛОК ЗАПРОШЕННЯ */}
+          {/* БЛОК ЗАПРОШЕННЯ */}
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-4 shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-widest text-amber-600">🔗 Запрошення до класу</p>
 
