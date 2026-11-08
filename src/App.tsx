@@ -63,12 +63,19 @@ type Tab = 'library' | 'sessions' | 'community' | 'classes' | 'profile' | 'board
 const TEACHER_TABS: [Tab, string][] = [['library', 'МОЯ БІБЛІОТЕКА'], ['sessions', 'СЕСІЇ'], ['community', 'ЗАГАЛЬНА БАЗА'], ['classes', 'КЛАСИ'], ['board', 'ДОШКА']];
 const asSearchable = (s: SessionItem): any => s;
 
+const DEFAULT_LIBRARY: LibraryItem[] = [
+  { id: 1, title: '1.1. 1914 – 1945 рр.', type: 'group', questions: [] },
+  { id: 2, title: '1.2. 1945 р. – початок XXI ст.', type: 'group', questions: [] },
+  { id: 3, title: '2.1. Від найдавніших часів – перша половина XVI ст.', type: 'group', questions: [] },
+  { id: 4, title: 'Історія 10 клас', type: 'folder', questions: [] },
+  { id: 5, title: 'Історія України. Завдання за роками', type: 'group', questions: [] }
+];
+
 export default function App() {
   const [route, setRoute] = useState<string>(() => window.location.hash);
   useEffect(() => { const h = () => setRoute(window.location.hash); window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, []);
   const [adminAuthed, setAdminAuthed] = useState<boolean>(isAdminSession);
 
-  // ───── КОРИСТУВАЧ / АВТОРИЗАЦІЯ ─────
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState<boolean>(false);
 
@@ -77,7 +84,6 @@ export default function App() {
   useEffect(() => { saveAccounts(accounts); }, [accounts]);
   useEffect(() => { saveSettings(settings); }, [settings]);
 
-  // ───── ДАНІ КОРИСТУВАЧА З SUPABASE ─────
   const [userInfo, setUserInfo] = useState<{ firstName: string; lastName: string; email: string }>({
     firstName: 'Гість', lastName: '', email: ''
   });
@@ -124,7 +130,6 @@ export default function App() {
 
   const teacherFullName = `${userInfo.firstName} ${userInfo.lastName}`.trim() || userInfo.firstName;
 
-  // ───── АВТОМАТИЧНА СИНХРОНІЗАЦІЯ З АДМІНКОЮ ─────
   useEffect(() => {
     if (currentUserId && userInfo.email && userInfo.email !== 'Гість') {
       setAccounts(prev => {
@@ -162,7 +167,6 @@ export default function App() {
   const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [inputData, setInputData] = useState<{ title: string; placeholder: string; onSubmit: (val: string) => void } | null>(null);
 
-  // ───── КОШИК ─────
   const [basket, setBasket] = useState<Question[]>([]);
   const [basketLoaded, setBasketLoaded] = useState(false);
   const [basketOwner, setBasketOwner] = useState<string | null>(null);
@@ -217,7 +221,6 @@ export default function App() {
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
 
-  // ВИПРАВЛЕНО: Скидаємо ім'я вчителя, якщо воно випадково збереглося для учня
   const [studentName, setStudentName] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('nmt-student-name');
@@ -240,21 +243,50 @@ export default function App() {
   const [editingMeetingSession, setEditingMeetingSession] = useState<SessionItem | null>(null);
   const [inspectDetails, setInspectDetails] = useState<{ studentName: string; question: Question; isCorrect: boolean; qIndex: number; } | null>(null);
 
-  const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([
-    { id: 1, title: '1.1. 1914 – 1945 рр.', type: 'group', questions: [] },
-    { id: 2, title: '1.2. 1945 р. – початок XXI ст.', type: 'group', questions: [] },
-    { id: 3, title: '2.1. Від найдавніших часів – перша половина XVI ст.', type: 'group', questions: [] },
-    { id: 4, title: 'Історія 10 клас', type: 'folder', questions: [] },
-    { id: 5, title: 'Історія України. Завдання за роками', type: 'group', questions: [] }
-  ]);
+  // ───── БІБЛІОТЕКА (ЗБЕРІГАЄТЬСЯ В БАЗІ ДАНИХ) ─────
+  const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
 
+  // Завантаження бібліотеки
+  useEffect(() => {
+    if (!authReady || !currentUserId || !supabase) return;
+    const fetchLib = async () => {
+      try {
+        const { data, error } = await supabase.from('libraries').select('items').eq('teacher_id', currentUserId).maybeSingle();
+        if (error) throw error;
+        if (data && data.items) {
+          setLibraryItems(data.items as LibraryItem[]);
+        } else {
+          setLibraryItems(DEFAULT_LIBRARY);
+          await supabase.from('libraries').insert({ teacher_id: currentUserId, items: DEFAULT_LIBRARY });
+        }
+      } catch (err) {
+        console.error('Помилка завантаження бібліотеки:', err);
+      } finally {
+        setLibraryLoaded(true);
+      }
+    };
+    fetchLib();
+  }, [authReady, currentUserId]);
+
+  // Збереження бібліотеки (з невеликою затримкою)
+  useEffect(() => {
+    if (!authReady || !libraryLoaded || !currentUserId || !supabase) return;
+    const timeout = setTimeout(() => {
+      supabase.from('libraries').upsert({ 
+        teacher_id: currentUserId, 
+        items: libraryItems,
+        updated_at: new Date().toISOString()
+      }).then(({ error }) => { if (error) console.error('Помилка збереження бібліотеки:', error); });
+    }, 1000);
+    return () => clearTimeout(timeout);
+  }, [libraryItems, libraryLoaded, currentUserId, authReady]);
+
+  // ───── СЕСІЇ (ЗБЕРІГАЮТЬСЯ В БАЗІ ДАНИХ) ─────
   const [activeSessions, setActiveSessions] = useState<SessionItem[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
-  const [sessionsOwner, setSessionsOwner] = useState<string | null>(null);
-
-  // ВИПРАВЛЕНО: Додано стан для сесії, знайденої в базі (для учнів)
-  const [fetchedSession, setFetchedSession] = useState<SessionItem | null>(null);
   const [liveStudentsData, setLiveStudentsData] = useState<StudentResult[]>([]);
+  const [fetchedSession, setFetchedSession] = useState<SessionItem | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -270,32 +302,26 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
+  // Завантаження сесій з БД
   useEffect(() => {
-    if (!authReady) return;
-    setSessionsLoaded(false);
-    if (!currentUserId) { setActiveSessions([]); setSessionsOwner(null); setSessionsLoaded(true); return; }
-    try {
-      const perUserKey = `nmt-sessions-${currentUserId}`;
-      let saved = localStorage.getItem(perUserKey);
-      if (!saved) {
-        const legacy = localStorage.getItem('nmt-sessions-local');
-        if (legacy) { saved = legacy; localStorage.setItem(perUserKey, legacy); }
+    if (!authReady || !currentUserId || !supabase) return;
+    const fetchSessions = async () => {
+      try {
+        const { data, error } = await supabase.from('sessions').select('data').eq('teacher_id', currentUserId).order('created_at', { ascending: false });
+        if (error) throw error;
+        if (data) {
+          setActiveSessions(data.map((row: any) => row.data as SessionItem));
+        }
+      } catch (err) {
+        console.error('Помилка завантаження сесій:', err);
+      } finally {
+        setSessionsLoaded(true);
       }
-      const parsed: SessionItem[] = saved ? JSON.parse(saved) : [];
-      setActiveSessions(Array.isArray(parsed) ? parsed : []);
-    } catch { setActiveSessions([]); }
-    setSessionsOwner(currentUserId);
-    setSessionsLoaded(true);
-  }, [currentUserId, authReady]);
+    };
+    fetchSessions();
+  }, [authReady, currentUserId]);
 
-  useEffect(() => {
-    if (!authReady || !sessionsLoaded) return;
-    if (sessionsOwner !== currentUserId) return;
-    if (!currentUserId) return;
-    try { localStorage.setItem(`nmt-sessions-${currentUserId}`, JSON.stringify(activeSessions)); } catch {}
-  }, [activeSessions, sessionsLoaded, currentUserId, sessionsOwner, authReady]);
-
-  // ВИПРАВЛЕНО: Завантаження сесії з бази, якщо її немає локально (для учня)
+  // Пошук сесії в БД для учня
   useEffect(() => {
     if (userRole !== 'student' || !sessionCode.trim() || !supabase) {
       setFetchedSession(null);
@@ -303,14 +329,14 @@ export default function App() {
     }
     const normalized = stripCode(sessionCode);
     if (activeSessions.some(s => stripCode(s.id) === normalized)) {
-      setFetchedSession(null); // Вже є локально
+      setFetchedSession(null);
       return;
     }
 
     let isMounted = true;
-    supabase.from('sessions').select('*').ilike('id', sessionCode.trim()).single()
+    supabase.from('sessions').select('data').ilike('id', sessionCode.trim()).maybeSingle()
       .then(({ data }) => {
-        if (isMounted && data) setFetchedSession(data as SessionItem);
+        if (isMounted && data && data.data) setFetchedSession(data.data as SessionItem);
         else if (isMounted) setFetchedSession(null);
       });
 
@@ -338,7 +364,6 @@ export default function App() {
   const libraryGroups: LibraryGroup[] = libraryItems.filter(i => (i.questions?.length ?? 0) > 0).map(i => ({ id: i.id, title: i.title, questions: i.questions as Question[] }));
   const studentFullName = studentName || 'Учень';
 
-  // ВИПРАВЛЕНО: Для учня пріоритет — сесія, знайдена в базі
   const studentSession = userRole === 'student' && fetchedSession ? fetchedSession : activeSessions.find(s => stripCode(s.id) === stripCode(sessionCode));
   const classSession = findSession(classes, normalizeCode(sessionCode));
 
@@ -348,10 +373,17 @@ export default function App() {
   const runGlobalSearch = () => { const q = globalQuery.trim(); if (!q) return; setSelectedFolder(null); const exact = activeSessions.find(s => stripCode(s.id) === stripCode(q)); if (exact) { setSelectedSessionForLive(exact); setActiveTab('sessions'); setGlobalQuery(''); return; } if (stripCode(q).length >= 2 && activeSessions.some(s => sessionRank(asSearchable(s), q) < 3)) { setSelectedSessionForLive(null); setSessionQuery(q); setSessionStatus('all'); setActiveTab('sessions'); return; } setSelectedSessionForLive(null); setCommunityQuery(q); setActiveTab('community'); };
 
   const toggleSessionStatus = (id: string) => {
-    setActiveSessions(prev => prev.map(s => {
-      if (s.id === id) return { ...s, status: s.status === 'Активна' ? 'Завершена' : 'Активна', isLive: false };
-      return s;
-    }));
+    setActiveSessions(prev => {
+      const updated = prev.map(s => {
+        if (s.id === id) return { ...s, status: s.status === 'Активна' ? 'Завершена' : 'Активна', isLive: false } as SessionItem;
+        return s;
+      });
+      const sess = updated.find(s => s.id === id);
+      if (supabase && sess) {
+        supabase.from('sessions').update({ data: sess }).eq('id', id).then();
+      }
+      return updated;
+    });
     if (selectedSessionForLive?.id === id) setSelectedSessionForLive(prev => prev ? { ...prev, status: prev.status === 'Активна' ? 'Завершена' : 'Активна', isLive: false } : null);
     notify('Статус сесії змінено!');
   };
@@ -359,7 +391,12 @@ export default function App() {
   const handleDeleteSession = (id: string) => {
     setConfirmData({
       title: 'Видалити сесію?', message: 'Ви впевнені, що хочете назавжди видалити цю сесію та всі її результати?',
-      onConfirm: () => { setActiveSessions(prev => prev.filter(s => s.id !== id)); if (selectedSessionForLive?.id === id) setSelectedSessionForLive(null); notify('Сесію видалено'); }
+      onConfirm: async () => { 
+        setActiveSessions(prev => prev.filter(s => s.id !== id)); 
+        if (selectedSessionForLive?.id === id) setSelectedSessionForLive(null); 
+        if (supabase) await supabase.from('sessions').delete().eq('id', id);
+        notify('Сесію видалено'); 
+      }
     });
   };
 
@@ -405,7 +442,6 @@ export default function App() {
     return <LandingPage onSelectRole={(role) => { setUserRole(role); setShowLanding(false); if (role === 'student') setActiveTab('classes'); }} />;
   }
 
-  // ВИПРАВЛЕНО: Якщо учень, і імені немає, показуємо "Учень", а не ім'я вчителя
   const displayFirstName = userRole === 'student' ? (studentName ? splitName(studentName).firstName : 'Учень') : userInfo.firstName;
 
   return (
@@ -482,7 +518,17 @@ export default function App() {
                       <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 space-x-3"><span className="font-mono font-black text-teal-600 text-sm tracking-wider">{selectedSessionForLive.id}</span><button onClick={() => { navigator.clipboard.writeText(selectedSessionForLive.id); notify('Код сесії скопійовано!'); }} className="text-slate-400 hover:text-slate-700 text-xs font-bold transition cursor-pointer">📋</button></div>
 
                       {selectedSessionForLive.mode === 'managed' && (
-                        <button onClick={() => { setActiveSessions(prev => prev.map(s => s.id === selectedSessionForLive.id ? { ...s, isLive: !s.isLive } : s)); setSelectedSessionForLive(prev => prev ? { ...prev, isLive: !prev.isLive } : null); notify(selectedSessionForLive.isLive ? 'Тестування зупинено!' : 'Тестування розпочато для всіх учнів!'); }} className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${selectedSessionForLive.isLive ? 'bg-rose-600 text-white animate-pulse' : 'bg-emerald-600 text-white'}`}><span>{selectedSessionForLive.isLive ? '🔴 Зупинити учнів' : '🟢 Почати для учнів'}</span></button>
+                        <button onClick={() => { 
+                          const newIsLive = !selectedSessionForLive.isLive;
+                          setActiveSessions(prev => {
+                            const updated = prev.map(s => s.id === selectedSessionForLive.id ? { ...s, isLive: newIsLive } : s);
+                            const sess = updated.find(s => s.id === selectedSessionForLive.id);
+                            if (supabase && sess) supabase.from('sessions').update({ data: sess }).eq('id', selectedSessionForLive.id).then();
+                            return updated;
+                          });
+                          setSelectedSessionForLive(prev => prev ? { ...prev, isLive: newIsLive } : null); 
+                          notify(newIsLive ? 'Тестування розпочато для всіх учнів!' : 'Тестування зупинено!'); 
+                        }} className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${selectedSessionForLive.isLive ? 'bg-rose-600 text-white animate-pulse' : 'bg-emerald-600 text-white'}`}><span>{selectedSessionForLive.isLive ? '🔴 Зупинити учнів' : '🟢 Почати для учнів'}</span></button>
                       )}
                       <button onClick={() => setIsPaused(!isPaused)} className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${isPaused ? 'bg-amber-600 text-white' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600'}`}><span>{isPaused ? '▶️ Відновити' : '⏸️ На паузу'}</span></button>
                       <button onClick={() => toggleSessionStatus(selectedSessionForLive.id)} className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${selectedSessionForLive.status === 'Завершена' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}><span>{selectedSessionForLive.status === 'Завершена' ? '▶️ Відновити сесію' : '⏹️ Завершити сесію'}</span></button>
@@ -596,22 +642,73 @@ export default function App() {
         </main>
 
         {userRole === 'teacher' && basket.length > 0 && !builderSessionId && (<SessionBasket items={basket} flash={basketFlash} onRemove={id => setBasket(basket.filter(q => q.id !== id))} onClear={() => setConfirmData({ title: 'Очистити збірку?', message: 'Ви впевнені, що хочете видалити всі питання зі збірки?', onConfirm: () => setBasket([]) })} onStart={startSessionFromBasket} onReorder={(newItems) => setBasket(newItems)} />)}
-        {userRole === 'teacher' && (() => { const s = builderSessionId ? activeSessions.find(x => x.id === builderSessionId) : undefined; return s ? (<SessionBuilder session={s} classes={classes} onClose={() => setBuilderSessionId(null)} onQuestionsChange={qs => setActiveSessions(prev => prev.map(x => (x.id === s.id ? { ...x, questions: qs } : x)))} onToggleStatus={() => toggleSessionStatus(s.id)} onAssign={(classId, data) => { const c = classes.find(x => x.id === classId); setClasses(prev => addAssignment(prev, classId, data)); notify(`Призначено класу «${c?.name ?? ''}»`); }} />) : null; })()}
+        {userRole === 'teacher' && (() => { 
+          const s = builderSessionId ? activeSessions.find(x => x.id === builderSessionId) : undefined; 
+          return s ? (
+            <SessionBuilder 
+              session={s} 
+              classes={classes} 
+              onClose={() => setBuilderSessionId(null)} 
+              onQuestionsChange={qs => setActiveSessions(prev => {
+                const updated = prev.map(x => (x.id === s.id ? { ...x, questions: qs } : x));
+                const sess = updated.find(x => x.id === s.id);
+                if (supabase && sess) {
+                   supabase.from('sessions').update({ data: sess }).eq('id', s.id).then();
+                }
+                return updated;
+              })} 
+              onToggleStatus={() => toggleSessionStatus(s.id)} 
+              onAssign={(classId, data) => { 
+                const c = classes.find(x => x.id === classId); 
+                setClasses(prev => addAssignment(prev, classId, data)); 
+                notify(`Призначено класу «${c?.name ?? ''}»`); 
+              }} 
+            />
+          ) : null; 
+        })()}
 
         <CreateSessionModal isOpen={isCreatingSession} onClose={() => setIsCreatingSession(false)} onCreate={(title, duration, startTime, endTime, mode, timeLimitType, gradingSystem, maxScore, minScore, showResults, showErrors, showCorrectAnswers) => {
           const code = 'NMT-' + Math.floor(1000 + Math.random() * 9000);
           const newSess = { id: code, title: title.trim() || 'Без назви', tag: 'НМТ', studentsCount: 0, date: 'Сьогодні', status: 'Активна', questions: newSessionQuestions, durationMinutes: duration, startTime: startTime, endTime: endTime, mode: mode, isLive: mode === 'managed' ? false : true, timeLimitType, gradingSystem, maxScore, minScore, showResults, showErrors, showCorrectAnswers };
+          
           setActiveSessions(prev => [newSess as any, ...prev]);
           
-          // ВИПРАВЛЕНО: Зберігаємо нову сесію в базу, щоб учень міг її знайти
-          if (supabase) {
-            supabase.from('sessions').insert([{ id: code, title: newSess.title, data: newSess }]).then(({error}) => { if(error) console.error(error); });
+          if (supabase && currentUserId) {
+            supabase.from('sessions').insert({ 
+              id: code, 
+              teacher_id: currentUserId, 
+              title: newSess.title, 
+              data: newSess 
+            }).then(({error}) => { if(error) console.error('Помилка створення сесії:', error); });
           }
 
           setIsCreatingSession(false); setNewSessionQuestions([]); setBasket([]); notify(`Сесію ${code} успішно створено!`);
         }} />
-        <EditSessionModal session={editingSession} onClose={() => setEditingSession(null)} onSave={(id, data) => { setActiveSessions(prev => prev.map(s => s.id === id ? { ...s, ...data } : s)); setEditingSession(null); notify('Налаштування сесії збережено!'); }} />
-        <MeetingLinkModal session={editingMeetingSession} onClose={() => setEditingMeetingSession(null)} onSave={(id, url) => { setActiveSessions(prev => prev.map(s => s.id === id ? { ...s, meetingUrl: url } : s)); setEditingMeetingSession(null); }} />
+        
+        <EditSessionModal session={editingSession} onClose={() => setEditingSession(null)} onSave={(id, data) => { 
+          setActiveSessions(prev => {
+            const updated = prev.map(s => s.id === id ? { ...s, ...data } as SessionItem : s);
+            if (supabase) {
+               const sess = updated.find(s => s.id === id);
+               if(sess) supabase.from('sessions').update({ data: sess, title: sess.title }).eq('id', id).then();
+            }
+            return updated;
+          }); 
+          setEditingSession(null); notify('Налаштування сесії збережено!'); 
+        }} />
+        
+        <MeetingLinkModal session={editingMeetingSession} onClose={() => setEditingMeetingSession(null)} onSave={(id, url) => { 
+          setActiveSessions(prev => {
+            const updated = prev.map(s => s.id === id ? { ...s, meetingUrl: url } as SessionItem : s);
+            if (supabase) {
+               const sess = updated.find(s => s.id === id);
+               if(sess) supabase.from('sessions').update({ data: sess }).eq('id', id).then();
+            }
+            return updated;
+          }); 
+          setEditingMeetingSession(null); 
+        }} />
+        
         <InspectDetailsModal details={inspectDetails} onClose={() => setInspectDetails(null)} />
         <CommunityTestViewModal test={viewingPublicTest} onClose={() => setViewingPublicTest(null)} onAddToBasket={addToBasket} />
         {assignSource && (<AssignModal test={assignSource} classes={classes} onClose={() => setAssignSource(null)} onAssign={(classId, data) => { const c = classes.find(x => x.id === classId); setClasses(prev => addAssignment(prev, classId, data)); setAssignSource(null); notify(`Тест «${data.title}» призначено класу «${c?.name ?? ''}».`); }} />)}
