@@ -599,6 +599,17 @@ export default function App() {
                       <div className="py-12 space-y-4 text-center"><div className="w-20 h-20 bg-slate-50 text-teal-500 rounded-2xl flex items-center justify-center mx-auto text-3xl border border-slate-200">📄</div><p className="text-slate-500 text-sm font-medium">Ця Група питань порожня. Створіть нове питання!</p><button onClick={openNewQuestion} className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-sm transition inline-flex items-center space-x-2 cursor-pointer"><span>+ Нове Питання</span></button></div>
                     )}
                   </div>
+
+                  {/* ПЛАВАЮЧА КНОПКА ДОДАВАННЯ ПИТАННЯ */}
+                  <div className="fixed bottom-8 right-8 z-50">
+                    <button 
+                      onClick={openNewQuestion} 
+                      className="px-6 py-4 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-full shadow-xl shadow-teal-500/30 transition hover:scale-105 flex items-center gap-2 cursor-pointer"
+                    >
+                      <span className="text-xl leading-none">+</span> Нове Питання
+                    </button>
+                  </div>
+
                 </div>
               ) : selectedSessionForLive ? (
                 <div className="space-y-6">

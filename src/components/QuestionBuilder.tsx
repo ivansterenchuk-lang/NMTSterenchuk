@@ -26,6 +26,11 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
   const [comment, setComment] = useState(initial?.comment ?? '');
   const [error, setError] = useState('');
 
+  // НОВЕ: Система оцінювання для конкретного питання
+  const [gradingSystem, setGradingSystem] = useState<'12' | '100' | 'preschool' | 'nus'>(
+    (initial as any)?.gradingSystem ?? '12'
+  );
+
   // 1. Одна або кілька відповідей
   const [options, setOptions] = useState<{ text: string; isCorrect: boolean; image?: string }[]>(
     initial?.options ?? [
@@ -95,6 +100,44 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
     const newCol = [...rightCol]; newCol[i].image = img; setRightCol(newCol);
   };
 
+  // ВИПРАВЛЕНО: Безпечне видалення лівої колонки з оновленням індексів
+  const removeLeftItem = (i: number) => {
+    if (leftCol.length <= 2) return;
+    const newLeft = leftCol.filter((_, k) => k !== i);
+    setLeftCol(newLeft);
+
+    const newMatches: Record<number, string> = {};
+    let newIndex = 0;
+    for (let k = 0; k < leftCol.length; k++) {
+      if (k !== i) {
+        if (matches[k]) newMatches[newIndex] = matches[k];
+        newIndex++;
+      }
+    }
+    setMatches(newMatches);
+  };
+
+  // ВИПРАВЛЕНО: Безпечне видалення правої колонки зі зміщенням літер
+  const removeRightItem = (i: number) => {
+    if (rightCol.length <= 2) return;
+    const newRight = rightCol.filter((_, k) => k !== i);
+    setRightCol(newRight);
+
+    const newMatches = { ...matches };
+    Object.keys(newMatches).forEach((k) => {
+      const leftIdx = Number(k);
+      const letter = newMatches[leftIdx];
+      const targetIdx = letter.charCodeAt(0) - 65; // 'A' = 0
+      
+      if (targetIdx === i) {
+        delete newMatches[leftIdx]; // Видаляємо відповідність, якщо елемент зник
+      } else if (targetIdx > i) {
+        newMatches[leftIdx] = String.fromCharCode(65 + targetIdx - 1); // Зсуваємо літеру (напр., 'C' стає 'B')
+      }
+    });
+    setMatches(newMatches);
+  };
+
   const updateSeq = (i: number, val: string) => {
     const newSeq = [...sequence]; newSeq[i].text = val; setSequence(newSeq);
   };
@@ -119,7 +162,8 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
       text: text.trim(),
       type,
       image: image || undefined,
-      comment: comment.trim() || undefined
+      comment: comment.trim() || undefined,
+      gradingSystem, // ДОДАНО: Система оцінювання
     };
 
     if (type === 'single' || type === 'multiple') {
@@ -129,16 +173,46 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
       q.options = validOptions;
     } 
     else if (type === 'matching') {
-      const vLeft = leftCol.filter(c => c.text.trim() !== '' || c.image);
-      const vRight = rightCol.filter(c => c.text.trim() !== '' || c.image);
-      if (vLeft.length < 2 || vRight.length < 2) { setError('Заповніть обидві колонки (мін. 2 елементи).'); return; }
-      
-      const missingMatch = vLeft.some((_, i) => !matches[i]);
-      if (missingMatch) { setError('Вкажіть відповідність для кожного елемента лівої колонки.'); return; }
+      // ВИПРАВЛЕНО: Захист від білого екрану (перевірка, чи не вказують на порожні елементи)
+      const newLeft = leftCol.filter((c) => c.text.trim() !== '' || c.image);
+      const newRight = rightCol.filter((c) => c.text.trim() !== '' || c.image);
 
-      q.leftColumn = vLeft;
-      q.rightColumn = vRight;
-      q.correctMatches = matches;
+      if (newLeft.length < 2 || newRight.length < 2) { 
+        setError('Заповніть обидві колонки (мін. 2 елементи).'); 
+        return; 
+      }
+
+      // Перевіряємо, чи всі елементи мають відповідники
+      for (let i = 0; i < leftCol.length; i++) {
+        const isLeftValid = leftCol[i].text.trim() !== '' || leftCol[i].image;
+        if (isLeftValid) {
+          const matchLetter = matches[i];
+          if (!matchLetter) {
+            setError('Вкажіть відповідність для кожного елемента лівої колонки.');
+            return;
+          }
+          const rIdx = matchLetter.charCodeAt(0) - 65;
+          const rightItem = rightCol[rIdx];
+          if (!rightItem || (rightItem.text.trim() === '' && !rightItem.image)) {
+            setError(`Відповідник «${matchLetter}» порожній. Заповніть його або оберіть інший.`);
+            return;
+          }
+        }
+      }
+
+      // Якщо все добре, перераховуємо індекси для безпечного збереження
+      const finalMatches: Record<number, string> = {};
+      let validLeftIndex = 0;
+      for (let i = 0; i < leftCol.length; i++) {
+        if (leftCol[i].text.trim() !== '' || leftCol[i].image) {
+          finalMatches[validLeftIndex] = matches[i];
+          validLeftIndex++;
+        }
+      }
+
+      q.leftColumn = newLeft;
+      q.rightColumn = newRight;
+      q.correctMatches = finalMatches;
     } 
     else if (type === 'sequence') {
       const vSeq = sequence.filter(c => c.text.trim() !== '' || c.image);
@@ -158,6 +232,14 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
           <div className="flex flex-wrap items-center gap-3">
             <select value={subject} disabled={editing} onChange={e => setSubject(e.target.value)} className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-teal-600 shadow-sm cursor-pointer disabled:opacity-60">
               {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+
+            {/* НОВЕ: Вибір системи оцінювання */}
+            <select value={gradingSystem} onChange={e => setGradingSystem(e.target.value as any)} className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-teal-600 shadow-sm cursor-pointer">
+              <option value="12">12-бальна</option>
+              <option value="100">100-бальна</option>
+              <option value="preschool">Без оцінки</option>
+              <option value="nus">НУШ</option>
             </select>
             
             <div className="flex flex-wrap bg-slate-200 p-1 rounded-xl text-xs font-bold border border-slate-300">
@@ -267,6 +349,7 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                           <option value="">—</option>
                           {rightCol.map((_, c) => <option key={c} value={String.fromCharCode(65 + c)}>{String.fromCharCode(65 + c)}</option>)}
                         </select>
+                        <button onClick={() => removeLeftItem(i)} disabled={leftCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                       <div className="flex items-center gap-2 pl-6">
                         {item.image ? (
@@ -293,7 +376,7 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-black text-slate-500 w-4">{String.fromCharCode(65 + i)}</span>
                         <input value={item.text} onChange={e => updateRight(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Варіант ${String.fromCharCode(65 + i)}`} />
-                        <button onClick={() => setRightCol(rightCol.filter((_, k) => k !== i))} disabled={rightCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => removeRightItem(i)} disabled={rightCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                       <div className="flex items-center gap-2 pl-6">
                         {item.image ? (
