@@ -1,170 +1,83 @@
-// src/lib/access.tsx
+import React, { createContext, useContext, ReactNode } from 'react';
+import type { Entitlement } from '../lib/access';
 
-export const ACCOUNTS_KEY = 'nmt_accounts_v1';
-export const SETTINGS_KEY = 'nmt_settings_v1';
-export const CURRENT_TEACHER_ID = 'teacher-001';
-export const SUPPORT_EMAIL = 'ivansterenchuk@gmail.com';
-export const ADMIN_CONFIGURED = true;
-
-// ---------- Типи ----------
-export type TeacherFeatures = {
-  pdf: boolean;
-  classes: boolean;
-  journal: boolean;
-  mistakes: boolean;
+// Типізація для контексту доступу
+type AccessContextType = {
+  ent: Entitlement;
+  teacherName: string;
+  guard: (action: () => void) => void;
+  printTest: (title: string, questions: any[]) => void;
 };
 
-export type TeacherAccount = {
-  id: string;
-  name: string;
-  email: string;
-  plan: 'trial' | 'pro' | 'free';
-  expiresAt: string; // YYYY-MM-DD
-  features?: TeacherFeatures; // Точкові доступи
-};
+// Створюємо сам контекст
+const AccessContext = createContext<AccessContextType | null>(null);
 
-export type PlatformSettings = {
-  proPrice: number;
-  trialDays: number;
-};
-
-export type Entitlement = {
-  title: string;
-  message: string;
-  isPremium: boolean;
-  features: TeacherFeatures;
-};
-
-// ---------- Сховище (localStorage) ----------
-export const loadAccounts = (): TeacherAccount[] => {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      // Міграція старих акаунтів (якщо у них немає features)
-      return parsed.map((acc: any) => {
-        if (!acc.features) {
-          const isPro = acc.plan === 'pro' || acc.plan === 'trial';
-          return {
-            ...acc,
-            features: { pdf: isPro, classes: isPro, journal: isPro, mistakes: isPro }
-          };
-        }
-        return acc;
-      });
+// ================= ПРОВАЙДЕР =================
+export function AccessProvider({ ent, teacherName, children }: { ent: Entitlement, teacherName: string, children: ReactNode }) {
+  
+  // Функція-охоронець: перевіряє, чи можна виконати дію (наприклад, згенерувати PDF)
+  const guard = (action: () => void) => {
+    // Перевіряємо, чи увімкнена функція PDF (для PRO тарифу)
+    if (ent.features.pdf || ent.isPremium) {
+      action();
+    } else {
+      alert('Ця функція доступна лише на тарифі PRO. Зверніться до адміністратора для активації.');
     }
-  } catch (e) {
-    console.error('Error loading accounts', e);
-  }
-  
-  // Дефолтний акаунт для тестів
-  return [{
-    id: CURRENT_TEACHER_ID,
-    name: 'Іван Стеренчук',
-    email: 'ivansterenchuk@gmail.com',
-    plan: 'pro',
-    expiresAt: '2026-12-31',
-    features: { pdf: true, classes: true, journal: true, mistakes: true }
-  }];
-};
-
-export const saveAccounts = (accounts: TeacherAccount[]) => {
-  try {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-  } catch (e) {
-    console.error('Error saving accounts', e);
-  }
-};
-
-export const loadSettings = (): PlatformSettings => {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Error loading settings', e);
-  }
-  return { proPrice: 299, trialDays: 7 };
-};
-
-export const saveSettings = (settings: PlatformSettings) => {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch (e) {
-    console.error('Error saving settings', e);
-  }
-};
-
-// ---------- Адмін-сесія ----------
-export const isAdminSession = (): boolean => {
-  return sessionStorage.getItem('nmt_admin_session') === 'true';
-};
-
-export const setAdminSession = (val: boolean) => {
-  if (val) {
-    sessionStorage.setItem('nmt_admin_session', 'true');
-  } else {
-    sessionStorage.removeItem('nmt_admin_session');
-  }
-};
-
-export const adminLogin = (user: string, pass: string): boolean => {
-  if (user === 'admin' && pass === 'admin') {
-    setAdminSession(true);
-    return true;
-  }
-  return false;
-};
-
-// ---------- Права доступу ----------
-export const getEntitlement = (account: TeacherAccount | undefined, settings: PlatformSettings): Entitlement => {
-  const noFeatures: TeacherFeatures = { pdf: false, classes: false, journal: false, mistakes: false };
-
-  if (!account) {
-    return { 
-      title: 'Гість', 
-      message: 'Увійдіть в систему', 
-      isPremium: false,
-      features: noFeatures
-    };
-  }
-  
-  const isExpired = new Date(account.expiresAt) < new Date();
-  const isPremium = (account.plan === 'pro' || account.plan === 'trial') && !isExpired;
-
-  // Якщо це PRO — вмикаємо всі функції ПРИМУСОВО
-  let activeFeatures = account.features;
-  if (isPremium) {
-    activeFeatures = { pdf: true, classes: true, journal: true, mistakes: true };
-  } else {
-    activeFeatures = noFeatures;
-  }
-
-  return {
-    title: isPremium ? 'PRO Тариф' : 'Базовий тариф',
-    message: isPremium 
-      ? 'Доступні всі обрані функції.' 
-      : 'Обмежений доступ. Зверніться до адміністратора для активації функцій.',
-    isPremium,
-    features: activeFeatures
   };
+
+  // Функція для друку тесту
+  const printTest = (title: string, questions: any[]) => {
+    guard(() => {
+      // Тут викликається вікно друку браузера. 
+      // Якщо у тебе є специфічна функція з lib/pdf.ts, ти можеш замінити цей рядок.
+      window.print(); 
+    });
+  };
+
+  return (
+    <AccessContext.Provider value={{ ent, teacherName, guard, printTest }}>
+      {children}
+    </AccessContext.Provider>
+  );
+}
+
+// ================= ХУК =================
+// Цей хук викликає AssignmentDetail.tsx і багато інших компонентів
+export const useAccess = () => {
+  const context = useContext(AccessContext);
+  if (!context) {
+    throw new Error('useAccess must be used within an AccessProvider');
+  }
+  return context;
 };
 
-// ---------- Утиліти для дат ----------
-export const addMonths = (date: Date | string, months: number): Date => {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
-};
+// ================= КОМПОНЕНТИ UI =================
+export function AccessBadge() {
+  const { ent } = useAccess();
+  return (
+    <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-default ${
+      ent.isPremium 
+        ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm' 
+        : 'bg-slate-50 text-slate-500 border-slate-200'
+    }`}>
+      {ent.isPremium ? '💎 ' : '🆓 '}
+      {ent.title}
+    </span>
+  );
+}
 
-export const fmtLong = (date: Date | string): string => {
-  return new Date(date).toLocaleDateString('uk-UA', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-};
-
-export const toYmd = (date: Date | string): string => {
-  const d = new Date(date);
-  return d.toISOString().split('T')[0];
-};
+export function PrintButton({ title, questions, className, children }: { title: string, questions: any[], className?: string, children?: ReactNode }) {
+  const { printTest, ent } = useAccess();
+  
+  const defaultClass = "px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5";
+  
+  return (
+    <button 
+      onClick={() => printTest(title, questions)} 
+      className={className || defaultClass}
+    >
+      {children || '📄 PDF для друку'}
+      {!ent.isPremium && ' 🔒'}
+    </button>
+  );
+}
