@@ -15,6 +15,10 @@ export default function QuestionCard({ q, index, expanded, onToggle, onEdit, onD
   const type = q.type || 'single';
   const points = maxPoints(q);
 
+  // Безпечне отримання тексту (на випадок, якщо дані старого формату - просто рядок)
+  const getText = (item: any) => typeof item === 'string' ? item : item?.text || '';
+  const getImage = (item: any) => typeof item === 'string' ? undefined : item?.image;
+
   return (
     <div
       className={`rounded-xl border transition ${
@@ -63,7 +67,13 @@ export default function QuestionCard({ q, index, expanded, onToggle, onEdit, onD
       {expanded && (
         <div className="px-4 pb-4 pt-4 space-y-4 border-t border-slate-800 bg-slate-950/30">
           
-          <div className="text-sm text-slate-300 leading-relaxed mb-4">
+          {q.image && (
+            <div className="mb-4">
+              <img src={q.image} alt="Question" className="max-h-48 rounded-lg border border-slate-700 object-contain bg-black/20" />
+            </div>
+          )}
+
+          <div className="text-sm text-slate-300 leading-relaxed mb-4 whitespace-pre-wrap">
             {q.text}
           </div>
 
@@ -87,6 +97,7 @@ export default function QuestionCard({ q, index, expanded, onToggle, onEdit, onD
                       {String.fromCharCode(65 + i)}
                     </span>
                     <span className="flex-1">{opt.text}</span>
+                    {opt.image && <img src={opt.image} alt="Option" className="h-10 w-10 object-cover rounded border border-slate-700" />}
                     {isCorrect && <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 shrink-0">Правильна</span>}
                   </div>
                 );
@@ -94,26 +105,29 @@ export default function QuestionCard({ q, index, expanded, onToggle, onEdit, onD
             </div>
           )}
 
-          {/* ВІДПОВІДНІСТЬ (matching) */}
+          {/* ВІДПОВІДНІСТЬ (matching) - ВИПРАВЛЕНО */}
           {type === 'matching' && q.leftColumn && q.rightColumn && (
             <div className="grid md:grid-cols-2 gap-4 text-sm mt-4">
               <div className="space-y-2">
                 <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Завдання (Ліва колонка)</p>
-                {q.leftColumn.map((leftItem, i) => {
+                {q.leftColumn.map((leftItem: any, i: number) => {
                   const correctLetter = q.correctMatches?.[i];
                   const rightIndex = correctLetter ? correctLetter.charCodeAt(0) - 65 : -1;
-                  const rightItem = rightIndex >= 0 && q.rightColumn ? q.rightColumn[rightIndex] : '—';
+                  const rightItemObj = rightIndex >= 0 && q.rightColumn ? q.rightColumn[rightIndex] : null;
+                  
                   return (
                     <div key={i} className="flex flex-col gap-1 bg-slate-900 border border-slate-800 rounded-xl p-3">
                       <div className="flex items-center gap-2">
                         <b className="text-indigo-300 w-5 shrink-0">{i + 1}.</b>
-                        <span className="text-slate-300 flex-1">{leftItem}</span>
+                        <span className="text-slate-300 flex-1">{getText(leftItem)}</span>
+                        {getImage(leftItem) && <img src={getImage(leftItem)} alt="Left" className="h-8 w-8 object-cover rounded border border-slate-700" />}
                       </div>
                       {correctLetter && (
                         <div className="flex items-center gap-2 mt-1 pt-2 border-t border-slate-800/50">
                           <span className="text-[10px] text-slate-500 ml-7 uppercase">Відповідь:</span>
                           <span className="text-xs font-black text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-900/50">{correctLetter}</span>
-                          <span className="text-xs text-emerald-300 truncate">{rightItem}</span>
+                          <span className="text-xs text-emerald-300 truncate">{getText(rightItemObj) || '—'}</span>
+                          {getImage(rightItemObj) && <img src={getImage(rightItemObj)} alt="Right" className="h-6 w-6 object-cover rounded border border-emerald-900/50" />}
                         </div>
                       )}
                     </div>
@@ -122,24 +136,26 @@ export default function QuestionCard({ q, index, expanded, onToggle, onEdit, onD
               </div>
               <div className="space-y-2">
                 <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Варіанти (Права колонка)</p>
-                {q.rightColumn.map((item, i) => (
+                {q.rightColumn.map((item: any, i: number) => (
                   <div key={i} className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl p-3">
                     <b className="text-indigo-300 w-5 shrink-0">{String.fromCharCode(65 + i)}</b>
-                    <span className="text-slate-300">{item}</span>
+                    <span className="text-slate-300 flex-1">{getText(item)}</span>
+                    {getImage(item) && <img src={getImage(item)} alt="Right" className="h-8 w-8 object-cover rounded border border-slate-700" />}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ПОСЛІДОВНІСТЬ (sequence) */}
+          {/* ПОСЛІДОВНІСТЬ (sequence) - ВИПРАВЛЕНО */}
           {type === 'sequence' && q.sequenceItems && (
             <div className="space-y-2 mt-4">
               <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-3">Правильна послідовність</p>
-              {q.sequenceItems.map((item, i) => (
+              {q.sequenceItems.map((item: any, i: number) => (
                 <div key={i} className="flex items-center gap-3 bg-emerald-950/30 border border-emerald-800/50 rounded-xl p-3 text-sm text-emerald-300">
                   <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-black shrink-0">{i + 1}</span>
-                  <span>{item}</span>
+                  <span className="flex-1">{getText(item)}</span>
+                  {getImage(item) && <img src={getImage(item)} alt="Seq" className="h-8 w-8 object-cover rounded border border-emerald-700" />}
                 </div>
               ))}
             </div>
