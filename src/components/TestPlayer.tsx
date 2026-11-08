@@ -50,11 +50,13 @@ export default function TestPlayer({
   const currentQ = questions[currentIndex];
   const totalQuestions = questions.length;
 
+  // Безпечне отримання тексту
+  const getText = (val: any) => typeof val === 'string' ? val : (val?.text || '—');
+
   // Нормалізація даних
   const leftItems = currentQ.leftColumn?.map((x: any) => typeof x === 'string' ? { id: x, text: x } : x) || currentQ.leftItems || [];
   const rightItems = currentQ.rightColumn?.map((x: any) => typeof x === 'string' ? { id: x, text: x } : x) || currentQ.rightItems || [];
-  const correctPairs = currentQ.correctMatches || currentQ.correctPairs || {};
-
+  
   const isMatching = currentQ.type === 'matching' || (leftItems.length > 0 && rightItems.length > 0);
   const isSequence = currentQ.type === 'sequence' || currentQ.type === 'chronology' || (currentQ.items && !leftItems.length && !currentQ.options);
   const isMultiple = currentQ.type === 'multiple' || currentQ.type === 'multi' || currentQ.isMultiple === true || Array.isArray(currentQ.correctAnswer) || Array.isArray(currentQ.correctAnswers);
@@ -124,10 +126,11 @@ export default function TestPlayer({
           }
         } 
         else if (q.type === 'sequence' || q.type === 'chronology' || (q.sequenceItems && !q.leftColumn && !q.options)) {
-          const correctOrder = q.correctOrder || []; 
+          // ВИПРАВЛЕНО: використовуємо sequenceItems як еталон послідовності
+          const correctOrder = q.correctOrder || (q.sequenceItems ? q.sequenceItems.map((x: any) => x.id || x.text || x) : []); 
           if (userAnswer && correctOrder.length > 0) {
-            const userStr = JSON.stringify(userAnswer.map((i: any) => String(i.id || i)));
-            const correctStr = JSON.stringify(correctOrder.map((i: any) => String(i.id || i)));
+            const userStr = JSON.stringify(userAnswer.map((i: any) => String(i.id || i.text || i)));
+            const correctStr = JSON.stringify(correctOrder.map((i: any) => String(i.id || i.text || i)));
             if (userStr === correctStr) {
               earnedPoints = points;
               isCorrect = true;
@@ -229,7 +232,8 @@ export default function TestPlayer({
                     {i + 1}
                   </span>
                   <div className="flex-1 flex flex-col gap-1">
-                    <span className="text-sm font-medium text-slate-800">{item.text || item.label || item}</span>
+                    {/* ВИПРАВЛЕНО: безпечне виведення тексту */}
+                    <span className="text-sm font-medium text-slate-800">{getText(item)}</span>
                     {item.image && <img src={item.image} className="max-h-24 object-contain self-start rounded border border-slate-200" />}
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
@@ -261,7 +265,8 @@ export default function TestPlayer({
                         {i + 1}
                       </span>
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-medium text-slate-800">{left.text}</span>
+                        {/* ВИПРАВЛЕНО: безпечне виведення тексту */}
+                        <span className="text-sm font-medium text-slate-800">{getText(left)}</span>
                         {left.image && <img src={left.image} className="max-h-20 object-contain self-start rounded border border-slate-200 mt-1" />}
                       </div>
                     </div>
@@ -277,8 +282,8 @@ export default function TestPlayer({
                       >
                         <option value="">— Оберіть варіант —</option>
                         {rightItems.map((right: any, j: number) => (
-                          <option key={right.id} value={right.id}>
-                            {getLetter(j)}. {right.text}
+                          <option key={right.id || j} value={right.id}>
+                            {getLetter(j)}. {getText(right)}
                           </option>
                         ))}
                       </select>

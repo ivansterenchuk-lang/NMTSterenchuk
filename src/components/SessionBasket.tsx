@@ -96,7 +96,7 @@ export default function SessionBasket({ items, flash, onRemove, onClear, onStart
                 </span>
                 <span className="text-[9px] font-bold text-emerald-600 ml-auto">{maxPoints(q)} б</span>
               </div>
-              <p className="text-xs text-slate-700 truncate">{q.text}</p>
+              <p className="text-xs text-slate-700 truncate">{q.text || 'Питання без тексту'}</p>
             </div>
 
             {/* Кнопка видалення */}

@@ -9,7 +9,6 @@ export default function InspectDetailsModal({
 }) {
   const [showComment, setShowComment] = useState(false);
 
-  // Скидаємо стан коментаря при відкритті нового питання
   useEffect(() => {
     if (details) setShowComment(false);
   }, [details]);
@@ -17,6 +16,7 @@ export default function InspectDetailsModal({
   if (!details) return null;
 
   const q = details.question;
+  const getText = (val: any) => typeof val === 'string' ? val : (val?.text || '—');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -74,7 +74,7 @@ export default function InspectDetailsModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 bg-slate-900">
-                  {q.leftColumn.map((item: string, i: number) => {
+                  {q.leftColumn.map((item: any, i: number) => {
                     const correctLetter = q.correctMatches?.[i];
                     const rightIndex = correctLetter ? correctLetter.charCodeAt(0) - 65 : -1;
                     const rightItem = rightIndex >= 0 && q.rightColumn ? q.rightColumn[rightIndex] : '—';
@@ -82,9 +82,10 @@ export default function InspectDetailsModal({
                     return (
                       <tr key={i} className="hover:bg-slate-800/50 transition">
                         <td className="px-4 py-3 text-center font-bold text-indigo-400">{i + 1}</td>
-                        <td className="px-4 py-3">{item}</td>
+                        {/* ВИПРАВЛЕНО: безпечне виведення тексту */}
+                        <td className="px-4 py-3">{getText(item)}</td>
                         <td className="px-4 py-3 text-center font-bold text-emerald-400 bg-emerald-900/10">{correctLetter || '—'}</td>
-                        <td className="px-4 py-3 text-emerald-300 bg-emerald-900/10">{rightItem}</td>
+                        <td className="px-4 py-3 text-emerald-300 bg-emerald-900/10">{getText(rightItem)}</td>
                       </tr>
                     );
                   })}
@@ -97,10 +98,11 @@ export default function InspectDetailsModal({
           {q.type === 'sequence' && q.sequenceItems && (
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
               <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Правильна послідовність</h4>
-              {q.sequenceItems.map((item: string, i: number) => (
+              {q.sequenceItems.map((item: any, i: number) => (
                 <div key={i} className="flex items-center space-x-3 text-sm bg-emerald-950/20 p-2 rounded border border-emerald-900/30">
                   <span className="w-6 h-6 bg-emerald-600 text-white rounded flex items-center justify-center font-bold shrink-0">{i + 1}</span>
-                  <span className="text-emerald-300">{item}</span>
+                  {/* ВИПРАВЛЕНО: безпечне виведення тексту */}
+                  <span className="text-emerald-300">{getText(item)}</span>
                 </div>
               ))}
             </div>
