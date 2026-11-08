@@ -76,6 +76,7 @@ export default function App() {
   useEffect(() => { const h = () => setRoute(window.location.hash); window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, []);
   const [adminAuthed, setAdminAuthed] = useState<boolean>(isAdminSession);
 
+  // ───── КОРИСТУВАЧ / АВТОРИЗАЦІЯ ─────
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState<boolean>(false);
 
@@ -88,6 +89,7 @@ export default function App() {
     firstName: 'Гість', lastName: '', email: ''
   });
 
+  // ───── ІНІЦІАЛІЗАЦІЯ АВТОРИЗАЦІЇ ─────
   useEffect(() => {
     if (!supabase) {
       setCurrentUserId(CURRENT_TEACHER_ID);
@@ -100,26 +102,26 @@ export default function App() {
       if (!session?.user) {
         setCurrentUserId(null);
         setUserInfo({ firstName: 'Гість', lastName: '', email: '' });
-        return;
-      }
-      setCurrentUserId(session.user.id);
-      const email: string = session.user.email || '';
-      const meta: any = session.user.user_metadata || {};
-      const firstNameFromMeta = meta.firstName || meta.first_name;
-      const lastNameFromMeta = meta.lastName || meta.last_name;
+      } else {
+        setCurrentUserId(session.user.id);
+        const email: string = session.user.email || '';
+        const meta: any = session.user.user_metadata || {};
+        const firstNameFromMeta = meta.firstName || meta.first_name;
+        const lastNameFromMeta = meta.lastName || meta.last_name;
 
-      if (firstNameFromMeta) {
-        setUserInfo({ firstName: firstNameFromMeta, lastName: lastNameFromMeta || '', email });
-        return;
+        if (firstNameFromMeta) {
+          setUserInfo({ firstName: firstNameFromMeta, lastName: lastNameFromMeta || '', email });
+        } else {
+          const namePart = email.split('@')[0] || 'Гість';
+          const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+          setUserInfo({ firstName: displayName, lastName: '', email });
+        }
       }
-      const namePart = email.split('@')[0] || 'Гість';
-      const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-      setUserInfo({ firstName: displayName, lastName: '', email });
+      setAuthReady(true); // Перевірка завершена
     };
 
     supabase.auth.getSession().then(({ data }) => {
       applyUser(data.session);
-      setAuthReady(true);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -130,6 +132,7 @@ export default function App() {
 
   const teacherFullName = `${userInfo.firstName} ${userInfo.lastName}`.trim() || userInfo.firstName;
 
+  // Синхронізація з адмінкою
   useEffect(() => {
     if (currentUserId && userInfo.email && userInfo.email !== 'Гість') {
       setAccounts(prev => {
@@ -153,6 +156,7 @@ export default function App() {
   const me = accounts.find(a => a.id === (currentUserId || CURRENT_TEACHER_ID)) || accounts.find(a => a.email?.toLowerCase() === userInfo.email?.toLowerCase());
   const ent = getEntitlement(me, settings);
 
+  // ───── СТАНИ ДОДАТКУ ─────
   const [showLanding, setShowLanding] = useState<boolean>(() => !readJoinParam());
   const [userRole, setUserRole] = useState<'student' | 'teacher'>(() => (readJoinParam() ? 'student' : 'teacher'));
   const [activeTab, setActiveTab] = useState<Tab>('sessions');
@@ -176,6 +180,14 @@ export default function App() {
   const [toast, setToast] = useState('');
   const notify = (m: string) => { setToast(m); window.setTimeout(() => setToast(''), 2400); };
 
+  // Якщо користувач увійшов — ховаємо екран входу
+  useEffect(() => {
+    if (authReady && currentUserId) {
+      setShowLanding(false);
+    }
+  }, [authReady, currentUserId]);
+
+  // ───── КОШИК ─────
   useEffect(() => {
     if (!authReady) return;
     setBasketLoaded(false);
@@ -229,7 +241,6 @@ export default function App() {
     } catch { return ''; }
   });
   const changeStudentName = (n: string) => { setStudentName(n); try { localStorage.setItem('nmt-student-name', n); } catch {} };
-  
   const [sessionCode, setSessionCode] = useState('');
 
   const [pendingJoin, setPendingJoin] = useState<string>(() => readJoinParam() ?? '');
@@ -243,13 +254,13 @@ export default function App() {
   const [editingMeetingSession, setEditingMeetingSession] = useState<SessionItem | null>(null);
   const [inspectDetails, setInspectDetails] = useState<{ studentName: string; question: Question; isCorrect: boolean; qIndex: number; } | null>(null);
 
-  // ───── БІБЛІОТЕКА (ЗБЕРІГАЄТЬСЯ В БАЗІ ДАНИХ) ─────
+  // ───── БІБЛІОТЕКА (БАЗА ДАНИХ) ─────
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
   const [libraryLoaded, setLibraryLoaded] = useState(false);
 
-  // Завантаження бібліотеки
   useEffect(() => {
     if (!authReady || !currentUserId || !supabase) return;
+    setLibraryLoaded(false);
     const fetchLib = async () => {
       try {
         const { data, error } = await supabase.from('libraries').select('items').eq('teacher_id', currentUserId).maybeSingle();
@@ -269,20 +280,23 @@ export default function App() {
     fetchLib();
   }, [authReady, currentUserId]);
 
-  // Збереження бібліотеки (з невеликою затримкою)
   useEffect(() => {
     if (!authReady || !libraryLoaded || !currentUserId || !supabase) return;
-    const timeout = setTimeout(() => {
-      supabase.from('libraries').upsert({ 
+    const timeout = setTimeout(async () => {
+      const { error } = await supabase.from('libraries').upsert({ 
         teacher_id: currentUserId, 
         items: libraryItems,
         updated_at: new Date().toISOString()
-      }).then(({ error }) => { if (error) console.error('Помилка збереження бібліотеки:', error); });
+      });
+      if (error) {
+        console.error('❌ Помилка збереження бібліотеки:', error);
+        notify(`Помилка збереження: ${error.message}`);
+      }
     }, 1000);
     return () => clearTimeout(timeout);
   }, [libraryItems, libraryLoaded, currentUserId, authReady]);
 
-  // ───── СЕСІЇ (ЗБЕРІГАЮТЬСЯ В БАЗІ ДАНИХ) ─────
+  // ───── СЕСІЇ (БАЗА ДАНИХ) ─────
   const [activeSessions, setActiveSessions] = useState<SessionItem[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [liveStudentsData, setLiveStudentsData] = useState<StudentResult[]>([]);
@@ -302,16 +316,13 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // Завантаження сесій з БД
   useEffect(() => {
     if (!authReady || !currentUserId || !supabase) return;
     const fetchSessions = async () => {
       try {
         const { data, error } = await supabase.from('sessions').select('data').eq('teacher_id', currentUserId).order('created_at', { ascending: false });
         if (error) throw error;
-        if (data) {
-          setActiveSessions(data.map((row: any) => row.data as SessionItem));
-        }
+        if (data) setActiveSessions(data.map((row: any) => row.data as SessionItem));
       } catch (err) {
         console.error('Помилка завантаження сесій:', err);
       } finally {
@@ -321,7 +332,6 @@ export default function App() {
     fetchSessions();
   }, [authReady, currentUserId]);
 
-  // Пошук сесії в БД для учня
   useEffect(() => {
     if (userRole !== 'student' || !sessionCode.trim() || !supabase) {
       setFetchedSession(null);
@@ -379,9 +389,7 @@ export default function App() {
         return s;
       });
       const sess = updated.find(s => s.id === id);
-      if (supabase && sess) {
-        supabase.from('sessions').update({ data: sess }).eq('id', id).then();
-      }
+      if (supabase && sess) supabase.from('sessions').update({ data: sess }).eq('id', id).then();
       return updated;
     });
     if (selectedSessionForLive?.id === id) setSelectedSessionForLive(prev => prev ? { ...prev, status: prev.status === 'Активна' ? 'Завершена' : 'Активна', isLive: false } : null);
@@ -436,6 +444,11 @@ export default function App() {
   if (route === '#admin' || route.startsWith('#admin/')) {
     if (!adminAuthed) return <AdminLogin onSuccess={() => { setAdminSession(true); setAdminAuthed(true); }} onExit={exitAdmin} />;
     return <AdminConsole accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} library={libraryItems.map(i => ({ id: i.id, title: i.title, type: i.type, count: i.questions?.length ?? 0 }))} onDeleteLibrary={id => setLibraryItems(prev => prev.filter(i => i.id !== id))} onLogout={() => { setAdminSession(false); setAdminAuthed(false); exitAdmin(); }} onExit={exitAdmin} />;
+  }
+
+  // ВИПРАВЛЕНО: Чекаємо, поки перевіриться сесія, щоб не викидало на екран входу
+  if (!authReady) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 font-bold text-lg">Завантаження...</div>;
   }
 
   if (showLanding) {
