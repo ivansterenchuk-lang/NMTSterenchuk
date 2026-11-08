@@ -126,7 +126,6 @@ export default function TestPlayer({
           }
         } 
         else if (q.type === 'sequence' || q.type === 'chronology' || (q.sequenceItems && !q.leftColumn && !q.options)) {
-          // ВИПРАВЛЕНО: використовуємо sequenceItems як еталон послідовності
           const correctOrder = q.correctOrder || (q.sequenceItems ? q.sequenceItems.map((x: any) => x.id || x.text || x) : []); 
           if (userAnswer && correctOrder.length > 0) {
             const userStr = JSON.stringify(userAnswer.map((i: any) => String(i.id || i.text || i)));
@@ -206,7 +205,6 @@ export default function TestPlayer({
           <h2 className="text-xl font-bold text-slate-900 leading-relaxed mb-3">
             {currentQ.text || currentQ.prompt || currentQ.title || 'Питання без тексту'}
           </h2>
-          {/* ЗОБРАЖЕННЯ ДО ПИТАННЯ */}
           {currentQ.image && (
             <div className="mb-4">
               <img src={currentQ.image} alt="До питання" className="max-h-64 object-contain rounded-xl border border-slate-200 shadow-sm" />
@@ -232,7 +230,6 @@ export default function TestPlayer({
                     {i + 1}
                   </span>
                   <div className="flex-1 flex flex-col gap-1">
-                    {/* ВИПРАВЛЕНО: безпечне виведення тексту */}
                     <span className="text-sm font-medium text-slate-800">{getText(item)}</span>
                     {item.image && <img src={item.image} className="max-h-24 object-contain self-start rounded border border-slate-200" />}
                   </div>
@@ -265,7 +262,6 @@ export default function TestPlayer({
                         {i + 1}
                       </span>
                       <div className="flex flex-col gap-1">
-                        {/* ВИПРАВЛЕНО: безпечне виведення тексту */}
                         <span className="text-sm font-medium text-slate-800">{getText(left)}</span>
                         {left.image && <img src={left.image} className="max-h-20 object-contain self-start rounded border border-slate-200 mt-1" />}
                       </div>
@@ -299,7 +295,10 @@ export default function TestPlayer({
             {currentQ.options ? (
               currentQ.options.map((opt: any, i: number) => {
                 const optId = opt.id !== undefined ? opt.id : i;
-                const currentSelections = answers[currentIndex] || (isMultiple ? [] : null);
+                
+                // ВИПРАВЛЕНО: Використовуємо ?? замість ||, щоб 0 (перший варіант) не вважався "порожнім"
+                const currentSelections = answers[currentIndex] ?? (isMultiple ? [] : null);
+                
                 const isSelected = isMultiple 
                   ? Array.isArray(currentSelections) && currentSelections.some((id: any) => String(id) === String(optId))
                   : String(currentSelections) === String(optId);
@@ -323,7 +322,6 @@ export default function TestPlayer({
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
                       <span className="font-medium">{opt.text || opt.label || (typeof opt === 'string' ? opt : '')}</span>
-                      {/* ЗОБРАЖЕННЯ ДО ВАРІАНТУ */}
                       {opt.image && (
                         <img src={opt.image} alt="Варіант" className="max-h-24 object-contain rounded border border-slate-200" />
                       )}
