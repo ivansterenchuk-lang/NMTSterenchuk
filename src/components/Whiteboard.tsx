@@ -122,7 +122,6 @@ export default function Whiteboard({ studentName = 'Учень', isTeacher = fal
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !currentLine || tool === 'text') return;
-    // Запобігаємо скролу сторінки при малюванні пальцем
     if ('touches' in e && e.cancelable) e.preventDefault();
     
     const { x, y } = getCoordinates(e);
@@ -155,12 +154,33 @@ export default function Whiteboard({ studentName = 'Учень', isTeacher = fal
     }
   };
 
+  // ЗБЕРЕЖЕННЯ З СІТКОЮ (Оскільки сітка тепер у CSS, домальовуємо її на тимчасовому полотні)
   const saveAsImage = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const ctx = tempCanvas.getContext('2d');
+    if (!ctx) return;
+
+    // 1. Білий фон
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+    // 2. Малюємо сітку (ті ж самі 20px, що і в CSS)
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= tempCanvas.width; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, tempCanvas.height); ctx.stroke(); }
+    for (let y = 0; y <= tempCanvas.height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(tempCanvas.width, y); ctx.stroke(); }
+
+    // 3. Переносимо малюнок з основного полотна
+    ctx.drawImage(canvas, 0, 0);
+
     const link = document.createElement('a');
     link.download = `homework-${roomId}-${studentName}-${Date.now()}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.href = tempCanvas.toDataURL('image/png');
     link.click();
   };
 
@@ -172,22 +192,29 @@ export default function Whiteboard({ studentName = 'Учень', isTeacher = fal
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Малюємо сітку (дуже світлу)
-    ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 1;
-    for (let x = 0; x <= canvas.width; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
-    for (let y = 0; y <= canvas.height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 
-    // Малюємо лінії
+    // Малюємо лінії (з підтримкою прозорої гумки)
     const allLines = currentLine ? [...lines, currentLine] : lines;
     allLines.forEach((line) => {
       ctx.beginPath();
-      ctx.strokeStyle = line.tool === 'eraser' ? '#ffffff' : line.color;
+      
+      if (line.tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      
+      ctx.strokeStyle = line.tool === 'eraser' ? 'rgba(0,0,0,1)' : line.color;
       ctx.lineWidth = line.tool === 'eraser' ? line.width * 4 : line.width;
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineCap = 'round'; 
+      ctx.lineJoin = 'round';
+      
       line.points.forEach((p, i) => { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); });
       ctx.stroke();
     });
+
+    // Повертаємо звичайний режим
+    ctx.globalCompositeOperation = 'source-over';
 
     // Малюємо текст
     texts.forEach((t) => {
@@ -286,9 +313,22 @@ export default function Whiteboard({ studentName = 'Учень', isTeacher = fal
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
           className={`w-full h-auto ${tool === 'text' ? 'cursor-text' : 'cursor-crosshair'} touch-none`}
+          style={{
+            // СІТКА ЧЕРЕЗ CSS (масштабується у відсотках, 1000/20=2%, 600/20=3.333%)
+            backgroundImage: 'linear-gradient(to right, #f1f5f9 1px, transparent 1px), linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)',
+            backgroundSize: '2% 3.3333%'
+          }}
         />
         {inputPos && (
-          <div className="absolute z-10 bg-white shadow-lg border border-teal-300 rounded p-1" style={{ left: inputPos.x, top: inputPos.y - 20 }}>
+          <div 
+            className="absolute z-10 bg-white shadow-lg border border-teal-300 rounded p-1"
+            style={{ 
+              // ПОЗИЦІОНУВАННЯ У ВІДСОТКАХ, ЩОБ НЕ ВІДЛІТАЛО ПРИ ЗМІНІ РОЗМІРУ ЕКРАНА
+              left: `${(inputPos.x / 1000) * 100}%`, 
+              top: `${(inputPos.y / 600) * 100}%`,
+              transform: 'translateY(-100%)'
+            }}
+          >
             <input
               autoFocus
               type="text"
@@ -296,7 +336,7 @@ export default function Whiteboard({ studentName = 'Учень', isTeacher = fal
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleTextSubmit(); if (e.key === 'Escape') setInputPos(null); }}
               onBlur={handleTextSubmit}
-              className="px-2 py-1 outline-none text-black font-sans"
+              className="px-2 py-1 outline-none text-black font-sans bg-transparent"
               style={{ fontSize: `${width * 6}px`, color: color }}
               placeholder="Введіть текст..."
             />

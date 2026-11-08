@@ -17,7 +17,8 @@ import { printHtml, sessionStudentHtml } from './lib/pdf';
 import { ME_ID, addAssignment, findSession, loadClasses, normalizeCode, readJoinParam, splitName, type ClassItem, type LibraryGroup } from './lib/classroom';
 import { ACCOUNTS_KEY, CURRENT_TEACHER_ID, SETTINGS_KEY, getEntitlement, isAdminSession, loadAccounts, loadSettings, saveAccounts, saveSettings, setAdminSession, type PlatformSettings, type TeacherAccount } from './lib/access';
 
-// НОВІ ІМПОРТИ ДЛЯ SUPABASE
+// SUPABASE
+import { supabase } from './lib/supabase';
 import { fetchAllClasses, fetchSessionSubmissions } from './lib/classroomRepository';
 
 import CreateSessionModal from './components/CreateSessionModal';
@@ -31,21 +32,19 @@ import CommunityTestViewModal from './components/CommunityTestViewModal';
 import LandingPage from './components/LandingPage';
 import { LogOut } from 'lucide-react';
 
-import { mockSession } from './lib/mockData';
-
 type LibraryItem = { id: number; title: string; type: 'group' | 'folder'; questions?: Question[]; isPublic?: boolean; };
 
-type SessionItem = { 
-  id: string; 
-  title: string; 
-  tag: string; 
-  studentsCount: number; 
-  date: string; 
-  status: 'Активна' | 'Завершена'; 
-  questions?: Question[]; 
-  meetingUrl?: string; 
-  durationMinutes?: number; 
-  startTime?: string; 
+type SessionItem = {
+  id: string;
+  title: string;
+  tag: string;
+  studentsCount: number;
+  date: string;
+  status: 'Активна' | 'Завершена';
+  questions?: Question[];
+  meetingUrl?: string;
+  durationMinutes?: number;
+  startTime?: string;
   endTime?: string;
   mode?: 'active' | 'scheduled' | 'managed';
   isLive?: boolean;
@@ -68,12 +67,18 @@ export default function App() {
   const [route, setRoute] = useState<string>(() => window.location.hash);
   useEffect(() => { const h = () => setRoute(window.location.hash); window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h); }, []);
   const [adminAuthed, setAdminAuthed] = useState<boolean>(isAdminSession);
-  
+
+  // ───── КОРИСТУВАЧ / АВТОРИЗАЦІЯ ─────
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState<boolean>(false);
+
   const [accounts, setAccounts] = useState<TeacherAccount[]>(() => loadAccounts());
   const [settings, setSettings] = useState<PlatformSettings>(loadSettings);
   useEffect(() => { saveAccounts(accounts); }, [accounts]);
   useEffect(() => { saveSettings(settings); }, [settings]);
-  const me = accounts.find(a => a.id === CURRENT_TEACHER_ID);
+
+  // Шукаємо акаунт за реальним Supabase user.id (fallback — CURRENT_TEACHER_ID для dev-режиму)
+  const me = accounts.find(a => a.id === (currentUserId || CURRENT_TEACHER_ID));
   const ent = getEntitlement(me, settings);
 
   const [showLanding, setShowLanding] = useState<boolean>(() => !readJoinParam());
@@ -81,7 +86,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('sessions');
   const [selectedFolder, setSelectedFolder] = useState<LibraryItem | null>(null);
   const [selectedSessionForLive, setSelectedSessionForLive] = useState<SessionItem | null>(null);
-  
+
   const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [expandedQuestionId, setExpandedQuestionId] = useState<number | null>(null);
@@ -90,21 +95,64 @@ export default function App() {
   const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [inputData, setInputData] = useState<{ title: string; placeholder: string; onSubmit: (val: string) => void } | null>(null);
 
-  const [basket, setBasket] = useState<Question[]>(() => { try { const raw = localStorage.getItem('nmt-basket-v1'); const v = raw ? JSON.parse(raw) : []; return Array.isArray(v) ? (v as Question[]) : []; } catch { return []; } });
+  // ───── КОШИК (ізольований по користувачу) ─────
+  const [basket, setBasket] = useState<Question[]>([]);
+  const [basketLoaded, setBasketLoaded] = useState(false);
+  const [basketOwner, setBasketOwner] = useState<string | null>(null);
   const [basketFlash, setBasketFlash] = useState(false);
+
   const [builderSessionId, setBuilderSessionId] = useState<string | null>(null);
   const [toast, setToast] = useState('');
-  useEffect(() => { try { localStorage.setItem('nmt-basket-v1', JSON.stringify(basket)); } catch {} }, [basket]);
 
   const notify = (m: string) => { setToast(m); window.setTimeout(() => setToast(''), 2400); };
-  
+
+  // Завантаження кошика для конкретного користувача
+  useEffect(() => {
+    if (!authReady) return;
+    setBasketLoaded(false);
+    if (!currentUserId) {
+      setBasket([]);
+      setBasketOwner(null);
+      setBasketLoaded(true);
+      return;
+    }
+    try {
+      const perUserKey = `nmt-basket-${currentUserId}`;
+      let raw = localStorage.getItem(perUserKey);
+      // Міграція зі старого спільного ключа
+      if (!raw) {
+        const legacy = localStorage.getItem('nmt-basket-v1');
+        if (legacy) {
+          raw = legacy;
+          localStorage.setItem(perUserKey, legacy);
+        }
+      }
+      const v = raw ? JSON.parse(raw) : [];
+      setBasket(Array.isArray(v) ? (v as Question[]) : []);
+    } catch {
+      setBasket([]);
+    }
+    setBasketOwner(currentUserId);
+    setBasketLoaded(true);
+  }, [currentUserId, authReady]);
+
+  // Збереження кошика — лише коли власник збігається з поточним користувачем
+  useEffect(() => {
+    if (!authReady || !basketLoaded) return;
+    if (basketOwner !== currentUserId) return;
+    if (!currentUserId) return;
+    try {
+      localStorage.setItem(`nmt-basket-${currentUserId}`, JSON.stringify(basket));
+    } catch {}
+  }, [basket, basketLoaded, currentUserId, basketOwner, authReady]);
+
   const addToBasket = (qs: Question[]) => {
-    const have = new Set(basket.map(q => q.id)); 
+    const have = new Set(basket.map(q => q.id));
     const fresh = qs.filter(q => !have.has(q.id));
     if (fresh.length === 0) { notify('Ці питання вже є у збірці'); return; }
-    setBasket([...basket, ...fresh.map(q => ({ ...q }))]); 
-    setBasketFlash(true); 
-    window.setTimeout(() => setBasketFlash(false), 1400); 
+    setBasket([...basket, ...fresh.map(q => ({ ...q }))]);
+    setBasketFlash(true);
+    window.setTimeout(() => setBasketFlash(false), 1400);
     notify(`Додано до збірки: ${fresh.length}`);
   };
 
@@ -116,22 +164,73 @@ export default function App() {
 
   useEffect(() => { const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK') { e.preventDefault(); searchRef.current?.focus(); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, []);
 
-  const [userInfo] = useState({ firstName: 'Іван', lastName: 'Стеренчук', email: 'ivansterenchuk@gmail.com' });
-  const teacherFullName = `${userInfo.firstName} ${userInfo.lastName}`;
-  
+  // ───── ДАНІ КОРИСТУВАЧА З SUPABASE ─────
+  const [userInfo, setUserInfo] = useState<{ firstName: string; lastName: string; email: string }>({
+    firstName: 'Гість', lastName: '', email: ''
+  });
+
+  useEffect(() => {
+    // Режим без Supabase (dev) — використовуємо старі демо-дані
+    if (!supabase) {
+      setCurrentUserId(CURRENT_TEACHER_ID);
+      setUserInfo({ firstName: 'Іван', lastName: 'Стеренчук', email: 'ivansterenchuk@gmail.com' });
+      setAuthReady(true);
+      return;
+    }
+
+    const applyUser = (session: any) => {
+      if (!session?.user) {
+        setCurrentUserId(null);
+        setUserInfo({ firstName: 'Гість', lastName: '', email: '' });
+        return;
+      }
+      setCurrentUserId(session.user.id);
+      const email: string = session.user.email || '';
+      const meta: any = session.user.user_metadata || {};
+      const firstNameFromMeta = meta.firstName || meta.first_name;
+      const lastNameFromMeta = meta.lastName || meta.last_name;
+
+      if (firstNameFromMeta) {
+        setUserInfo({
+          firstName: firstNameFromMeta,
+          lastName: lastNameFromMeta || '',
+          email
+        });
+        return;
+      }
+
+      // Fallback: виводимо імʼя з email (ivan.petrenko@gmail.com → Ivan)
+      const namePart = email.split('@')[0] || 'Гість';
+      const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+      setUserInfo({ firstName: displayName, lastName: '', email });
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      applyUser(data.session);
+      setAuthReady(true);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const teacherFullName = `${userInfo.firstName} ${userInfo.lastName}`.trim() || userInfo.firstName;
+
   const [classes, setClasses] = useState<ClassItem[]>([]);
-  
+
   const [studentName, setStudentName] = useState<string>(() => { try { return localStorage.getItem('nmt-student-name') ?? ''; } catch { return ''; } });
   const changeStudentName = (n: string) => { setStudentName(n); try { localStorage.setItem('nmt-student-name', n); } catch {} };
   const [sessionCode, setSessionCode] = useState('');
-  
+
   const [pendingJoin, setPendingJoin] = useState<string>(() => readJoinParam() ?? '');
   const consumeJoin = () => { setPendingJoin(''); try { window.history.replaceState({}, '', window.location.pathname); } catch {} };
-  
+
   const [isPaused, setIsPaused] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [newSessionQuestions, setNewSessionQuestions] = useState<Question[]>([]);
-  
+
   const [editingSession, setEditingSession] = useState<SessionItem | null>(null);
   const [editingMeetingSession, setEditingMeetingSession] = useState<SessionItem | null>(null);
   const [inspectDetails, setInspectDetails] = useState<{ studentName: string; question: Question; isCorrect: boolean; qIndex: number; } | null>(null);
@@ -144,20 +243,14 @@ export default function App() {
     { id: 5, title: 'Історія України. Завдання за роками', type: 'group', questions: [] }
   ]);
 
-  const [activeSessions, setActiveSessions] = useState<SessionItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('nmt-sessions-local');
-      const sessions = saved ? JSON.parse(saved) : [];
-      if (!sessions.find((s: any) => s.id === mockSession.id)) {
-        sessions.unshift(mockSession as any);
-      }
-      return sessions;
-    } catch { return [mockSession as any]; }
-  });
-  
+  // ───── СЕСІЇ (ізольовані по користувачу) ─────
+  const [activeSessions, setActiveSessions] = useState<SessionItem[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [sessionsOwner, setSessionsOwner] = useState<string | null>(null);
+
   const [liveStudentsData, setLiveStudentsData] = useState<StudentResult[]>([]);
 
-  // ЗАВАНТАЖЕННЯ КЛАСІВ З БАЗИ ПРИ СТАРТІ
+  // Завантаження класів з бази при старті
   useEffect(() => {
     let isMounted = true;
     const loadDbData = async () => {
@@ -173,10 +266,47 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // ЗБЕРЕЖЕННЯ СЕСІЙ У LOCALSTORAGE
-  useEffect(() => { localStorage.setItem('nmt-sessions-local', JSON.stringify(activeSessions)); }, [activeSessions]);
+  // Завантаження сесій для конкретного вчителя
+  useEffect(() => {
+    if (!authReady) return;
+    setSessionsLoaded(false);
+    if (!currentUserId) {
+      setActiveSessions([]);
+      setSessionsOwner(null);
+      setSessionsLoaded(true);
+      return;
+    }
+    try {
+      const perUserKey = `nmt-sessions-${currentUserId}`;
+      let saved = localStorage.getItem(perUserKey);
+      // Міграція зі старого спільного ключа
+      if (!saved) {
+        const legacy = localStorage.getItem('nmt-sessions-local');
+        if (legacy) {
+          saved = legacy;
+          localStorage.setItem(perUserKey, legacy);
+        }
+      }
+      const parsed: SessionItem[] = saved ? JSON.parse(saved) : [];
+      setActiveSessions(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setActiveSessions([]);
+    }
+    setSessionsOwner(currentUserId);
+    setSessionsLoaded(true);
+  }, [currentUserId, authReady]);
 
-  // РЕАЛЬНИЙ МОНІТОРИНГ СЕСІЙ (Опитування кожні 5 сек)
+  // Збереження сесій — лише коли власник збігається
+  useEffect(() => {
+    if (!authReady || !sessionsLoaded) return;
+    if (sessionsOwner !== currentUserId) return;
+    if (!currentUserId) return;
+    try {
+      localStorage.setItem(`nmt-sessions-${currentUserId}`, JSON.stringify(activeSessions));
+    } catch {}
+  }, [activeSessions, sessionsLoaded, currentUserId, sessionsOwner, authReady]);
+
+  // Реальний моніторинг сесій (опитування кожні 5 сек)
   useEffect(() => {
     if (!selectedSessionForLive) {
       setLiveStudentsData([]);
@@ -224,9 +354,9 @@ export default function App() {
   };
 
   const exportStudentPdf = (student: StudentResult) => { printHtml(sessionStudentHtml({ studentName: student.name, sessionTitle: selectedSessionForLive?.title ?? 'Тестування НМТ', percent: student.scorePercent, answers: student.answers, questions: selectedSessionForLive?.questions ?? [], teacher: teacherFullName }), `Результат — ${student.name}`); };
-  
+
   const runGlobalSearch = () => { const q = globalQuery.trim(); if (!q) return; setSelectedFolder(null); const exact = activeSessions.find(s => stripCode(s.id) === stripCode(q)); if (exact) { setSelectedSessionForLive(exact); setActiveTab('sessions'); setGlobalQuery(''); return; } if (stripCode(q).length >= 2 && activeSessions.some(s => sessionRank(asSearchable(s), q) < 3)) { setSelectedSessionForLive(null); setSessionQuery(q); setSessionStatus('all'); setActiveTab('sessions'); return; } setSelectedSessionForLive(null); setCommunityQuery(q); setActiveTab('community'); };
-  
+
   const toggleSessionStatus = (id: string) => {
     setActiveSessions(prev => prev.map(s => {
       if (s.id === id) {
@@ -290,14 +420,14 @@ export default function App() {
   };
 
   const togglePublic = (id: number, e?: React.MouseEvent) => { e?.stopPropagation(); const item = libraryItems.find(i => i.id === id); if (!item) return; if (!item.isPublic && (item.questions?.length ?? 0) === 0) { notify('Спершу додайте хоча б одне питання!'); return; } const updated: LibraryItem = { ...item, isPublic: !item.isPublic }; setLibraryItems(libraryItems.map(i => (i.id === id ? updated : i))); if (selectedFolder?.id === id) setSelectedFolder(updated); };
-  
+
   const importPublicTest = (t: PublicTest) => { const base = Date.now(); const copy: LibraryItem = { id: base, title: `${t.title} (від ${t.author})`, type: 'group', isPublic: false, questions: t.questions.map((q, i) => ({ ...q, id: base + i + 1 })) }; setLibraryItems([...libraryItems, copy]); notify(`Тест «${t.title}» додано до вашої бібліотеки (${t.questions.length} пит.).`); };
-  
+
   const openNewQuestion = () => { setEditingQuestion(null); setIsQuestionModalOpen(true); };
   const closeQuestionModal = () => { setIsQuestionModalOpen(false); setEditingQuestion(null); };
-  
+
   const handleSaveQuestion = (q: Question) => { if (!selectedFolder) return; const current = selectedFolder.questions || []; const exists = current.some(x => x.id === q.id); const updatedQuestions = exists ? current.map(x => (x.id === q.id ? q : x)) : [...current, q]; const updatedFolderItem: LibraryItem = { ...selectedFolder, questions: updatedQuestions }; setSelectedFolder(updatedFolderItem); setLibraryItems(libraryItems.map(i => (i.id === updatedFolderItem.id ? updatedFolderItem : i))); if (exists) setActiveSessions(prev => prev.map(s => ({ ...s, questions: (s.questions || []).map(x => (x.id === q.id ? q : x)) }))); if (!exists) setExpandedQuestionId(q.id); closeQuestionModal(); };
-  
+
   const deleteQuestionFromActiveItem = (questionId: number) => {
     if (!selectedFolder) return;
     setConfirmData({
@@ -311,28 +441,37 @@ export default function App() {
       }
     });
   };
-  
+
   const studentSession = activeSessions.find(s => stripCode(s.id) === stripCode(sessionCode));
   const classSession = findSession(classes, normalizeCode(sessionCode));
-  
+
   const goTab = (tab: Tab) => { setSelectedSessionForLive(null); setSelectedFolder(null); setActiveTab(tab); };
   const navCls = (tab: Tab) => `transition cursor-pointer py-1 ${activeTab === tab ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-900'}`;
   const exitAdmin = () => { try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch {} setRoute(''); };
+
+  const handleLogout = async () => {
+    try {
+      if (supabase) await supabase.auth.signOut();
+    } catch {}
+    setShowLanding(true);
+    setSelectedSessionForLive(null);
+    setSelectedFolder(null);
+    setActiveTab('sessions');
+  };
 
   if (route === '#admin' || route.startsWith('#admin/')) {
     if (!adminAuthed) return <AdminLogin onSuccess={() => { setAdminSession(true); setAdminAuthed(true); }} onExit={exitAdmin} />;
     return <AdminConsole accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} library={libraryItems.map(i => ({ id: i.id, title: i.title, type: i.type, count: i.questions?.length ?? 0 }))} onDeleteLibrary={id => setLibraryItems(prev => prev.filter(i => i.id !== id))} onLogout={() => { setAdminSession(false); setAdminAuthed(false); exitAdmin(); }} onExit={exitAdmin} />;
   }
 
-  // ЯКЩО ПОКАЗУЄМО ТИТУЛЬНУ СТОРІНКУ
   if (showLanding) {
     return (
-      <LandingPage 
+      <LandingPage
         onSelectRole={(role) => {
           setUserRole(role);
           setShowLanding(false);
-          if (role === 'student') setActiveTab('classes'); 
-        }} 
+          if (role === 'student') setActiveTab('classes');
+        }}
       />
     );
   }
@@ -342,7 +481,7 @@ export default function App() {
   return (
     <AccessProvider ent={ent} teacherName={teacherFullName}>
       <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans relative">
-        
+
         {/* ШАПКА */}
         <header className="bg-white border-b border-slate-200 px-6 py-3.5 flex flex-col lg:flex-row justify-between items-center gap-4 shadow-sm">
           <div className="flex items-center space-x-8">
@@ -362,15 +501,9 @@ export default function App() {
                 <AccessBadge />
               </>
             )}
-            
-            {/* КНОПКА ВИХОДУ */}
-            <button 
-              onClick={() => {
-                setShowLanding(true);
-                setSelectedSessionForLive(null);
-                setSelectedFolder(null);
-                setActiveTab('sessions');
-              }} 
+
+            <button
+              onClick={handleLogout}
               className="px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
             >
               <LogOut className="w-4 h-4" /> Вийти
@@ -385,16 +518,16 @@ export default function App() {
 
         <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full">
           {userRole === 'student' ? (
-            <StudentView 
-              classes={classes} 
-              setClasses={setClasses} 
-              studentName={studentName} 
-              changeStudentName={changeStudentName} 
-              pendingJoin={pendingJoin} 
-              consumeJoin={consumeJoin} 
-              studentSession={studentSession} 
-              classSession={classSession} 
-              studentFullName={studentFullName} 
+            <StudentView
+              classes={classes}
+              setClasses={setClasses}
+              studentName={studentName}
+              changeStudentName={changeStudentName}
+              pendingJoin={pendingJoin}
+              consumeJoin={consumeJoin}
+              studentSession={studentSession}
+              classSession={classSession}
+              studentFullName={studentFullName}
               sessionCode={sessionCode}
               setSessionCode={setSessionCode}
               notify={notify}
@@ -423,15 +556,15 @@ export default function App() {
                   <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
                     {selectedFolder.questions && selectedFolder.questions.length > 0 ? (
                       selectedFolder.questions.map((q, idx) => (
-                        <QuestionCard 
-                          key={q.id} 
-                          q={q} 
-                          index={idx} 
-                          expanded={expandedQuestionId === q.id} 
-                          onToggle={() => setExpandedQuestionId(expandedQuestionId === q.id ? null : q.id)} 
-                          onEdit={() => { setEditingQuestion(q); setIsQuestionModalOpen(true); }} 
-                          onDelete={() => deleteQuestionFromActiveItem(q.id)} 
-                          onAddToSession={() => addToBasket([q])} 
+                        <QuestionCard
+                          key={q.id}
+                          q={q}
+                          index={idx}
+                          expanded={expandedQuestionId === q.id}
+                          onToggle={() => setExpandedQuestionId(expandedQuestionId === q.id ? null : q.id)}
+                          onEdit={() => { setEditingQuestion(q); setIsQuestionModalOpen(true); }}
+                          onDelete={() => deleteQuestionFromActiveItem(q.id)}
+                          onAddToSession={() => addToBasket([q])}
                         />
                       ))
                     ) : (
@@ -445,9 +578,9 @@ export default function App() {
                     <div className="space-y-1"><div className="flex items-center space-x-2 text-xs text-slate-500"><button onClick={() => setSelectedSessionForLive(null)} className="text-teal-600 hover:underline font-bold">← Назад до списку сесій</button><span>•</span><span className="text-slate-600">Моніторинг в реальному часі</span></div><h2 className="text-lg font-black text-slate-900">{selectedSessionForLive.title}</h2></div>
                     <div className="flex flex-wrap items-center gap-3">
                       <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 space-x-3"><span className="font-mono font-black text-teal-600 text-sm tracking-wider">{selectedSessionForLive.id}</span><button onClick={() => { navigator.clipboard.writeText(selectedSessionForLive.id); notify('Код сесії скопійовано!'); }} className="text-slate-400 hover:text-slate-700 text-xs font-bold transition cursor-pointer">📋</button></div>
-                      
+
                       {selectedSessionForLive.mode === 'managed' && (
-                        <button 
+                        <button
                           onClick={() => {
                             setActiveSessions(prev => prev.map(s => s.id === selectedSessionForLive.id ? { ...s, isLive: !s.isLive } : s));
                             setSelectedSessionForLive(prev => prev ? { ...prev, isLive: !prev.isLive } : null);
@@ -489,26 +622,26 @@ export default function App() {
                               <span>{student.name}</span>
                             </td>
                             <td className="p-4 text-center font-black text-teal-600">{student.scorePercent}%</td>
-                            
+
                             {student.answers.map((isCorrect, qIdx) => {
                               const questionObj = selectedSessionForLive?.questions?.[qIdx];
                               return (
                                 <td key={qIdx} className="p-2 text-center border-l border-slate-200">
-                                  <button 
-                                    onClick={() => { 
-                                      if (questionObj) { 
-                                        setInspectDetails({ studentName: student.name, question: questionObj, isCorrect, qIndex: qIdx }); 
-                                      } else { 
-                                        notify('Питання відсутнє у цій сесії.'); 
-                                      } 
-                                    }} 
+                                  <button
+                                    onClick={() => {
+                                      if (questionObj) {
+                                        setInspectDetails({ studentName: student.name, question: questionObj, isCorrect, qIndex: qIdx });
+                                      } else {
+                                        notify('Питання відсутнє у цій сесії.');
+                                      }
+                                    }}
                                     disabled={!questionObj}
                                     className={`w-7 h-7 mx-auto rounded-lg flex items-center justify-center font-bold text-xs transition ${
-                                      !questionObj 
-                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50' 
+                                      !questionObj
+                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50'
                                         : `cursor-pointer hover:scale-110 ${
-                                            isCorrect 
-                                              ? 'bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100' 
+                                            isCorrect
+                                              ? 'bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100'
                                               : 'bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100'
                                           }`
                                     }`}
@@ -519,7 +652,7 @@ export default function App() {
                                 </td>
                               );
                             })}
-                            
+
                             <td className="p-4 text-center border-l border-slate-200">
                               <button onClick={() => exportStudentPdf(student)} className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer">📄 Зберегти PDF</button>
                             </td>
@@ -557,7 +690,7 @@ export default function App() {
                           <span className="text-xs font-bold text-slate-500">Знайдено {visibleSessions.length} з {activeSessions.length}</span>
                         </div>
                       </div>
-                      
+
                       <div className="space-y-3">
                         {visibleSessions.length === 0 && (
                           <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
@@ -584,7 +717,7 @@ export default function App() {
                                 </div>
                               </div>
                             </div>
-                            
+
                             <div className="flex flex-wrap items-center gap-2 self-end md:self-center shrink-0">
                               {session.meetingUrl ? (
                                 <a href={session.meetingUrl} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1"><span>📹</span></a>
@@ -592,15 +725,15 @@ export default function App() {
                                 <button onClick={() => { setEditingMeetingSession(session); }} className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition flex items-center space-x-1" title="Додати посилання"><span>➕ Посилання</span></button>
                               )}
                               <button onClick={() => { setEditingSession(session); }} className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer" title="Налаштувати час та тривалість">✏️ Час</button>
-                              
+
                               <button onClick={() => setBuilderSessionId(session.id)} className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition cursor-pointer" title="Редагувати питання сесії">✏️ Питання</button>
 
                               <button onClick={() => toggleSessionStatus(session.id)} className={`px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${session.status === 'Активна' ? 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100'}`} title={session.status === 'Активна' ? 'Завершити сесію' : 'Відновити сесію'}>
                                 {session.status === 'Активна' ? '⏹ Завершити' : '▶ Відновити'}
                               </button>
-                              
+
                               <button onClick={() => handleDeleteSession(session.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer" title="Видалити сесію">🗑️</button>
-                              
+
                               <button onClick={() => setSelectedSessionForLive(session)} className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer">📡 Моніторинг</button>
                             </div>
                           </div>
@@ -609,13 +742,13 @@ export default function App() {
                     </div>
                   )}
                   {activeTab === 'community' && (
-                    <CommunitySearch 
-                      tests={allPublicTests} 
-                      query={communityQuery} 
-                      onQueryChange={setCommunityQuery} 
-                      onImport={importPublicTest} 
+                    <CommunitySearch
+                      tests={allPublicTests}
+                      query={communityQuery}
+                      onQueryChange={setCommunityQuery}
+                      onImport={importPublicTest}
                       onAssign={(t: any) => setAssignSource(t)}
-                      onAddToBasket={addToBasket} 
+                      onAddToBasket={addToBasket}
                       onView={(t: any) => setViewingPublicTest(t)}
                     />
                   )}
@@ -649,7 +782,7 @@ export default function App() {
                     </div>
                   )}
                   {activeTab === 'classes' && (<TeacherClasses classes={classes} setClasses={setClasses} teacherName={teacherFullName} libraryGroups={libraryGroups} />)}
-                  
+
                   {activeTab === 'board' && (
                     <div className="space-y-4">
                       <h2 className="text-2xl font-black text-slate-900">Інтерактивна дошка</h2>
@@ -657,8 +790,8 @@ export default function App() {
                       <Whiteboard studentName={studentFullName} isTeacher={userRole === 'teacher'} />
                     </div>
                   )}
-                  
-                  {activeTab === 'profile' && (<div className="bg-white p-8 rounded-2xl border border-slate-200 space-y-6 max-w-2xl shadow-sm"><div className="flex items-center space-x-6"><div className="w-20 h-20 bg-gradient-to-tr from-teal-500 to-emerald-400 text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-md">{userInfo.firstName.charAt(0)}</div><div><h2 className="text-2xl font-bold text-slate-900">{teacherFullName}</h2><p className="text-sm text-slate-500">{userInfo.email}</p><span className={`inline-block mt-2 text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200`}>PRO Тариф</span></div></div><div className="rounded-xl border border-slate-200 bg-slate-50 p-6 space-y-4"><h3 className="text-lg font-bold text-slate-900">Ваш тариф: PRO</h3><p className="text-sm text-slate-500">Доступні всі функції, включно з PDF.</p></div></div>)}
+
+                  {activeTab === 'profile' && (<div className="bg-white p-8 rounded-2xl border border-slate-200 space-y-6 max-w-2xl shadow-sm"><div className="flex items-center space-x-6"><div className="w-20 h-20 bg-gradient-to-tr from-teal-500 to-emerald-400 text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-md">{userInfo.firstName.charAt(0)}</div><div><h2 className="text-2xl font-bold text-slate-900">{teacherFullName}</h2><p className="text-sm text-slate-500">{userInfo.email || '—'}</p><span className={`inline-block mt-2 text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200`}>PRO Тариф</span></div></div><div className="rounded-xl border border-slate-200 bg-slate-50 p-6 space-y-4"><h3 className="text-lg font-bold text-slate-900">Ваш тариф: PRO</h3><p className="text-sm text-slate-500">Доступні всі функції, включно з PDF.</p></div></div>)}
                 </>
               )}
             </div>
@@ -666,55 +799,55 @@ export default function App() {
         </main>
 
         {userRole === 'teacher' && basket.length > 0 && !builderSessionId && (
-          <SessionBasket 
-            items={basket} 
-            flash={basketFlash} 
-            onRemove={id => setBasket(basket.filter(q => q.id !== id))} 
-            onClear={() => setConfirmData({ 
-              title: 'Очистити збірку?', 
-              message: 'Ви впевнені, що хочете видалити всі питання зі збірки?', 
-              onConfirm: () => setBasket([]) 
-            })} 
-            onStart={startSessionFromBasket} 
+          <SessionBasket
+            items={basket}
+            flash={basketFlash}
+            onRemove={id => setBasket(basket.filter(q => q.id !== id))}
+            onClear={() => setConfirmData({
+              title: 'Очистити збірку?',
+              message: 'Ви впевнені, що хочете видалити всі питання зі збірки?',
+              onConfirm: () => setBasket([])
+            })}
+            onStart={startSessionFromBasket}
             onReorder={(newItems) => setBasket(newItems)}
           />
         )}
-        
-        {userRole === 'teacher' && (() => { 
-          const s = builderSessionId ? activeSessions.find(x => x.id === builderSessionId) : undefined; 
+
+        {userRole === 'teacher' && (() => {
+          const s = builderSessionId ? activeSessions.find(x => x.id === builderSessionId) : undefined;
           return s ? (
-            <SessionBuilder 
-              session={s} 
-              classes={classes} 
-              onClose={() => setBuilderSessionId(null)} 
-              onQuestionsChange={qs => setActiveSessions(prev => prev.map(x => (x.id === s.id ? { ...x, questions: qs } : x)))} 
-              onToggleStatus={() => toggleSessionStatus(s.id)} 
-              onAssign={(classId, data) => { 
-                const c = classes.find(x => x.id === classId); 
-                setClasses(prev => addAssignment(prev, classId, data)); 
-                notify(`Призначено класу «${c?.name ?? ''}»`); 
-              }} 
+               <SessionBuilder
+              session={s}
+              classes={classes}
+              onClose={() => setBuilderSessionId(null)}
+              onQuestionsChange={qs => setActiveSessions(prev => prev.map(x => (x.id === s.id ? { ...x, questions: qs } : x)))}
+              onToggleStatus={() => toggleSessionStatus(s.id)}
+              onAssign={(classId, data) => {
+                const c = classes.find(x => x.id === classId);
+                setClasses(prev => addAssignment(prev, classId, data));
+                notify(`Призначено класу «${c?.name ?? ''}»`);
+              }}
             />
-          ) : null; 
+          ) : null;
         })()}
 
-        <CreateSessionModal 
-          isOpen={isCreatingSession} 
-          onClose={() => setIsCreatingSession(false)} 
+        <CreateSessionModal
+          isOpen={isCreatingSession}
+          onClose={() => setIsCreatingSession(false)}
           onCreate={(title, duration, startTime, endTime, mode, timeLimitType, gradingSystem, maxScore, minScore, showResults, showErrors, showCorrectAnswers) => {
             const code = 'NMT-' + Math.floor(1000 + Math.random() * 9000);
-            setActiveSessions(prev => [{ 
-              id: code, 
-              title: title.trim() || 'Без назви', 
-              tag: 'НМТ', 
-              studentsCount: 0, 
-              date: 'Сьогодні', 
-              status: 'Активна', 
-              questions: newSessionQuestions, 
-              durationMinutes: duration, 
-              startTime: startTime, 
-              endTime: endTime, 
-              mode: mode, 
+            setActiveSessions(prev => [{
+              id: code,
+              title: title.trim() || 'Без назви',
+              tag: 'НМТ',
+              studentsCount: 0,
+              date: 'Сьогодні',
+              status: 'Активна',
+              questions: newSessionQuestions,
+              durationMinutes: duration,
+              startTime: startTime,
+              endTime: endTime,
+              mode: mode,
               isLive: mode === 'managed' ? false : true,
               timeLimitType,
               gradingSystem,
@@ -724,23 +857,23 @@ export default function App() {
               showErrors,
               showCorrectAnswers
             }, ...prev]);
-            setIsCreatingSession(false); 
-            setNewSessionQuestions([]); 
-            setBasket([]); 
+            setIsCreatingSession(false);
+            setNewSessionQuestions([]);
+            setBasket([]);
             notify(`Сесію ${code} успішно створено!`);
-          }} 
+          }}
         />
-        
+
         <EditSessionModal session={editingSession} onClose={() => setEditingSession(null)} onSave={(id, data) => { setActiveSessions(prev => prev.map(s => s.id === id ? { ...s, ...data } : s)); setEditingSession(null); notify('Налаштування сесії збережено!'); }} />
-        
+
         <MeetingLinkModal session={editingMeetingSession} onClose={() => setEditingMeetingSession(null)} onSave={(id, url) => { setActiveSessions(prev => prev.map(s => s.id === id ? { ...s, meetingUrl: url } : s)); setEditingMeetingSession(null); }} />
-        
+
         <InspectDetailsModal details={inspectDetails} onClose={() => setInspectDetails(null)} />
 
-        <CommunityTestViewModal 
-          test={viewingPublicTest} 
-          onClose={() => setViewingPublicTest(null)} 
-          onAddToBasket={addToBasket} 
+        <CommunityTestViewModal
+          test={viewingPublicTest}
+          onClose={() => setViewingPublicTest(null)}
+          onAddToBasket={addToBasket}
         />
 
         {assignSource && (
@@ -751,20 +884,20 @@ export default function App() {
           <QuestionBuilder key={editingQuestion?.id ?? 'new'} initial={editingQuestion} onClose={closeQuestionModal} onSave={handleSaveQuestion} />
         )}
 
-        <ConfirmModal 
-          isOpen={!!confirmData} 
-          title={confirmData?.title || ''} 
-          message={confirmData?.message || ''} 
-          onConfirm={() => confirmData?.onConfirm()} 
-          onCancel={() => setConfirmData(null)} 
+        <ConfirmModal
+          isOpen={!!confirmData}
+          title={confirmData?.title || ''}
+          message={confirmData?.message || ''}
+          onConfirm={() => { const cb = confirmData?.onConfirm; setConfirmData(null); cb?.(); }}
+          onCancel={() => setConfirmData(null)}
         />
 
-        <InputModal 
-          isOpen={!!inputData} 
-          title={inputData?.title || ''} 
-          placeholder={inputData?.placeholder || ''} 
-          onClose={() => setInputData(null)} 
-          onSubmit={(val) => inputData?.onSubmit(val)} 
+        <InputModal
+          isOpen={!!inputData}
+          title={inputData?.title || ''}
+          placeholder={inputData?.placeholder || ''}
+          onClose={() => setInputData(null)}
+          onSubmit={(val) => { const cb = inputData?.onSubmit; setInputData(null); cb?.(val); }}
         />
 
         {toast && (<div className="fixed top-6 right-6 z-[60] px-5 py-4 rounded-xl border border-teal-500/50 bg-white text-sm font-bold text-slate-900 shadow-xl shadow-teal-500/10 flex items-center space-x-3"><span className="text-xl">✨</span><span>{toast}</span></div>)}
