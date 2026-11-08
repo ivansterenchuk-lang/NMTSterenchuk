@@ -77,8 +77,90 @@ export default function App() {
   useEffect(() => { saveAccounts(accounts); }, [accounts]);
   useEffect(() => { saveSettings(settings); }, [settings]);
 
-  // Шукаємо акаунт за реальним Supabase user.id (fallback — CURRENT_TEACHER_ID для dev-режиму)
-  const me = accounts.find(a => a.id === (currentUserId || CURRENT_TEACHER_ID));
+  // ───── ДАНІ КОРИСТУВАЧА З SUPABASE ─────
+  const [userInfo, setUserInfo] = useState<{ firstName: string; lastName: string; email: string }>({
+    firstName: 'Гість', lastName: '', email: ''
+  });
+
+  useEffect(() => {
+    // Режим без Supabase (dev) — використовуємо старі демо-дані
+    if (!supabase) {
+      setCurrentUserId(CURRENT_TEACHER_ID);
+      setUserInfo({ firstName: 'Іван', lastName: 'Стеренчук', email: 'ivansterenchuk@gmail.com' });
+      setAuthReady(true);
+      return;
+    }
+
+    const applyUser = (session: any) => {
+      if (!session?.user) {
+        setCurrentUserId(null);
+        setUserInfo({ firstName: 'Гість', lastName: '', email: '' });
+        return;
+      }
+      setCurrentUserId(session.user.id);
+      const email: string = session.user.email || '';
+      const meta: any = session.user.user_metadata || {};
+      const firstNameFromMeta = meta.firstName || meta.first_name;
+      const lastNameFromMeta = meta.lastName || meta.last_name;
+
+      if (firstNameFromMeta) {
+        setUserInfo({
+          firstName: firstNameFromMeta,
+          lastName: lastNameFromMeta || '',
+          email
+        });
+        return;
+      }
+
+      // Fallback: виводимо імʼя з email (ivan.petrenko@gmail.com → Ivan)
+      const namePart = email.split('@')[0] || 'Гість';
+      const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+      setUserInfo({ firstName: displayName, lastName: '', email });
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      applyUser(data.session);
+      setAuthReady(true);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const teacherFullName = `${userInfo.firstName} ${userInfo.lastName}`.trim() || userInfo.firstName;
+
+  // ───── АВТОМАТИЧНА СИНХРОНІЗАЦІЯ З АДМІНКОЮ ─────
+  useEffect(() => {
+    if (currentUserId && userInfo.email && userInfo.email !== 'Гість') {
+      setAccounts(prev => {
+        const byId = prev.find(a => a.id === currentUserId);
+        const byEmail = prev.find(a => a.email?.toLowerCase() === userInfo.email.toLowerCase());
+
+        if (!byId && !byEmail) {
+          // Якщо це новий вчитель — створюємо для нього базовий акаунт в адмінці
+          const newAccount: TeacherAccount = {
+            id: currentUserId,
+            name: teacherFullName || userInfo.firstName,
+            email: userInfo.email,
+            plan: 'free',
+            expiresAt: new Date().toISOString().split('T')[0],
+            features: { pdf: false, classes: false, journal: false, mistakes: false }
+          };
+          return [...prev, newAccount];
+        } else if (byEmail && byEmail.id !== currentUserId) {
+          // Якщо акаунт вже є (створили вручну), але ID інший — прив'язуємо його до Supabase
+          return prev.map(a => a.email?.toLowerCase() === userInfo.email.toLowerCase() ? { ...a, id: currentUserId } : a);
+        }
+        return prev;
+      });
+    }
+  }, [currentUserId, userInfo.email, teacherFullName]);
+
+  // Шукаємо акаунт за реальним Supabase user.id (fallback — пошук за Email)
+  const me = accounts.find(a => a.id === (currentUserId || CURRENT_TEACHER_ID)) 
+          || accounts.find(a => a.email?.toLowerCase() === userInfo.email?.toLowerCase());
   const ent = getEntitlement(me, settings);
 
   const [showLanding, setShowLanding] = useState<boolean>(() => !readJoinParam());
@@ -163,60 +245,6 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK') { e.preventDefault(); searchRef.current?.focus(); } }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, []);
-
-  // ───── ДАНІ КОРИСТУВАЧА З SUPABASE ─────
-  const [userInfo, setUserInfo] = useState<{ firstName: string; lastName: string; email: string }>({
-    firstName: 'Гість', lastName: '', email: ''
-  });
-
-  useEffect(() => {
-    // Режим без Supabase (dev) — використовуємо старі демо-дані
-    if (!supabase) {
-      setCurrentUserId(CURRENT_TEACHER_ID);
-      setUserInfo({ firstName: 'Іван', lastName: 'Стеренчук', email: 'ivansterenchuk@gmail.com' });
-      setAuthReady(true);
-      return;
-    }
-
-    const applyUser = (session: any) => {
-      if (!session?.user) {
-        setCurrentUserId(null);
-        setUserInfo({ firstName: 'Гість', lastName: '', email: '' });
-        return;
-      }
-      setCurrentUserId(session.user.id);
-      const email: string = session.user.email || '';
-      const meta: any = session.user.user_metadata || {};
-      const firstNameFromMeta = meta.firstName || meta.first_name;
-      const lastNameFromMeta = meta.lastName || meta.last_name;
-
-      if (firstNameFromMeta) {
-        setUserInfo({
-          firstName: firstNameFromMeta,
-          lastName: lastNameFromMeta || '',
-          email
-        });
-        return;
-      }
-
-      // Fallback: виводимо імʼя з email (ivan.petrenko@gmail.com → Ivan)
-      const namePart = email.split('@')[0] || 'Гість';
-      const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-      setUserInfo({ firstName: displayName, lastName: '', email });
-    };
-
-    supabase.auth.getSession().then(({ data }) => {
-      applyUser(data.session);
-      setAuthReady(true);
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      applyUser(session);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  const teacherFullName = `${userInfo.firstName} ${userInfo.lastName}`.trim() || userInfo.firstName;
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
 
@@ -791,7 +819,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {activeTab === 'profile' && (<div className="bg-white p-8 rounded-2xl border border-slate-200 space-y-6 max-w-2xl shadow-sm"><div className="flex items-center space-x-6"><div className="w-20 h-20 bg-gradient-to-tr from-teal-500 to-emerald-400 text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-md">{userInfo.firstName.charAt(0)}</div><div><h2 className="text-2xl font-bold text-slate-900">{teacherFullName}</h2><p className="text-sm text-slate-500">{userInfo.email || '—'}</p><span className={`inline-block mt-2 text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200`}>PRO Тариф</span></div></div><div className="rounded-xl border border-slate-200 bg-slate-50 p-6 space-y-4"><h3 className="text-lg font-bold text-slate-900">Ваш тариф: PRO</h3><p className="text-sm text-slate-500">Доступні всі функції, включно з PDF.</p></div></div>)}
+                  {activeTab === 'profile' && (<div className="bg-white p-8 rounded-2xl border border-slate-200 space-y-6 max-w-2xl shadow-sm"><div className="flex items-center space-x-6"><div className="w-20 h-20 bg-gradient-to-tr from-teal-500 to-emerald-400 text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-md">{userInfo.firstName.charAt(0)}</div><div><h2 className="text-2xl font-bold text-slate-900">{teacherFullName}</h2><p className="text-sm text-slate-500">{userInfo.email || '—'}</p><span className={`inline-block mt-2 text-[10px] font-extrabold px-2.5 py-1 rounded-md uppercase tracking-wider ${ent.isPremium ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>{ent.title}</span></div></div><div className="rounded-xl border border-slate-200 bg-slate-50 p-6 space-y-4"><h3 className="text-lg font-bold text-slate-900">Ваш тариф: {ent.title}</h3><p className="text-sm text-slate-500">{ent.message}</p></div></div>)}
                 </>
               )}
             </div>

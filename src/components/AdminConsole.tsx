@@ -81,8 +81,8 @@ export default function AdminConsole({
   const filteredAccounts = useMemo(() => {
     return accounts.filter(acc => {
       const matchesSearch = 
-        acc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        acc.email.toLowerCase().includes(searchQuery.toLowerCase());
+        (acc.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (acc.email || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesFilter = filterPlan === 'all' ? true : acc.plan === filterPlan;
       return matchesSearch && matchesFilter;
     });
@@ -111,11 +111,16 @@ export default function AdminConsole({
       const newAccounts = prev.map(acc => {
         if (acc.id === teacherId) {
           const isPro = acc.plan === 'pro';
-          return {
+          // Вказуємо тип TeacherAccount, щоб TypeScript не сварився на plan: 'free' | 'pro'
+          const updatedAcc: TeacherAccount = {
             ...acc,
             plan: isPro ? 'free' : 'pro',
-            expiresAt: isPro ? '2024-01-01' : getNextYearDate()
+            expiresAt: isPro ? '2024-01-01' : getNextYearDate(),
+            features: isPro 
+              ? { pdf: false, classes: false, journal: false, mistakes: false }
+              : { pdf: true, classes: true, journal: true, mistakes: true }
           };
+          return updatedAcc;
         }
         return acc;
       });
@@ -128,11 +133,15 @@ export default function AdminConsole({
 
     if (selectedTeacher && selectedTeacher.id === teacherId) {
       const isPro = selectedTeacher.plan === 'pro';
-      setSelectedTeacher({
+      const updatedSelected: TeacherAccount = {
         ...selectedTeacher,
         plan: isPro ? 'free' : 'pro',
-        expiresAt: isPro ? '2024-01-01' : getNextYearDate()
-      });
+        expiresAt: isPro ? '2024-01-01' : getNextYearDate(),
+        features: isPro 
+          ? { pdf: false, classes: false, journal: false, mistakes: false }
+          : { pdf: true, classes: true, journal: true, mistakes: true }
+      };
+      setSelectedTeacher(updatedSelected);
     }
 
     // Перезавантажуємо сторінку, щоб оновити статус на сайті
@@ -318,7 +327,7 @@ export default function AdminConsole({
             <div className="flex justify-between items-start">
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-                  {selectedTeacher.name.charAt(0)}
+                  {selectedTeacher.name ? selectedTeacher.name.charAt(0) : '?'}
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white">{selectedTeacher.name}</h3>
