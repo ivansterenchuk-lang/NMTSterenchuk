@@ -65,7 +65,6 @@ export async function fetchAllClasses(): Promise<ClassItem[]> {
 export async function createClassInDb(classItem: ClassItem): Promise<boolean> {
   if (!supabase) return false;
   try {
-    // 🔥 ВИПРАВЛЕНО: Отримуємо реальний ID вчителя з сесії
     const { data: { user } } = await supabase.auth.getUser();
     const realTeacherId = user?.id || 'teacher-001';
 
@@ -74,7 +73,7 @@ export async function createClassInDb(classItem: ClassItem): Promise<boolean> {
       name: classItem.name,
       section: classItem.section,
       code: classItem.code,
-      teacher_id: realTeacherId, // 🔥 Використовуємо реальний ID
+      teacher_id: realTeacherId,
       teacher_name: classItem.teacherName,
       accept_joins: classItem.acceptJoins
     });
@@ -96,7 +95,8 @@ export async function updateClassInDb(classId: string, data: any): Promise<boole
     if (data.code !== undefined) updateData.code = data.code;
     if (data.acceptJoins !== undefined) updateData.accept_joins = data.acceptJoins;
     
-    await supabase.from('classes').update(updateData).eq('id', classId);
+    const { error } = await supabase.from('classes').update(updateData).eq('id', classId);
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка оновлення класу:', e);
@@ -107,7 +107,8 @@ export async function updateClassInDb(classId: string, data: any): Promise<boole
 export async function deleteClassFromDb(classId: string): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('classes').delete().eq('id', classId);
+    const { error } = await supabase.from('classes').delete().eq('id', classId);
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка видалення класу:', e);
@@ -120,11 +121,12 @@ export async function deleteClassFromDb(classId: string): Promise<boolean> {
 export async function addStudentToClass(classId: string, studentId: string, studentName: string): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('class_students').upsert({
+    const { error } = await supabase.from('class_students').upsert({
       class_id: classId,
       student_id: studentId,
       student_name: studentName
     });
+    if (error) throw error; // 🔥 ТЕПЕР МИ БАЧИМО ПОМИЛКУ
     return true;
   } catch (e) {
     console.error('Помилка додавання учня:', e);
@@ -135,7 +137,8 @@ export async function addStudentToClass(classId: string, studentId: string, stud
 export async function removeStudentFromClass(classId: string, studentId: string): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('class_students').delete().eq('class_id', classId).eq('student_id', studentId);
+    const { error } = await supabase.from('class_students').delete().eq('class_id', classId).eq('student_id', studentId);
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка видалення учня:', e);
@@ -148,7 +151,7 @@ export async function removeStudentFromClass(classId: string, studentId: string)
 export async function createAssignmentInDb(classId: string, a: Assignment): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('assignments').insert({
+    const { error } = await supabase.from('assignments').insert({
       id: a.id,
       class_id: classId,
       title: a.title,
@@ -157,6 +160,7 @@ export async function createAssignmentInDb(classId: string, a: Assignment): Prom
       questions: a.questions,
       created_at: a.createdAt || new Date().toISOString()
     });
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка створення завдання:', e);
@@ -167,7 +171,8 @@ export async function createAssignmentInDb(classId: string, a: Assignment): Prom
 export async function deleteAssignmentFromDb(assignmentId: string): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('assignments').delete().eq('id', assignmentId);
+    const { error } = await supabase.from('assignments').delete().eq('id', assignmentId);
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка видалення завдання:', e);
@@ -189,7 +194,7 @@ export async function saveSubmissionToDb(
 ): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('assignment_submissions').upsert({
+    const { error } = await supabase.from('assignment_submissions').upsert({
       assignment_id: assignmentId,
       student_id: studentId,
       student_name: studentName,
@@ -200,6 +205,7 @@ export async function saveSubmissionToDb(
       late,
       submitted_at: new Date().toISOString()
     });
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка збереження результату:', e);
@@ -237,7 +243,7 @@ export async function fetchSessionSubmissions(sessionId: string): Promise<any[]>
 export async function createPostInDb(classId: string, post: any): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('class_posts').insert({
+    const { error } = await supabase.from('class_posts').insert({
       id: post.id,
       class_id: classId,
       kind: post.kind,
@@ -245,6 +251,7 @@ export async function createPostInDb(classId: string, post: any): Promise<boolea
       assignment_id: post.assignmentId,
       created_at: post.createdAt
     });
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка створення поста:', e);
@@ -255,7 +262,8 @@ export async function createPostInDb(classId: string, post: any): Promise<boolea
 export async function deletePostFromDb(postId: string): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('class_posts').delete().eq('id', postId);
+    const { error } = await supabase.from('class_posts').delete().eq('id', postId);
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка видалення поста:', e);
