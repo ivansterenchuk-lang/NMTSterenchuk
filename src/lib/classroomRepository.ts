@@ -12,15 +12,11 @@ export async function fetchAllClasses(): Promise<ClassItem[]> {
     const { data: studentsData } = await supabase.from('class_students').select('*');
     const { data: assignmentsData } = await supabase.from('assignments').select('*').order('created_at', { ascending: false });
     const { data: submissionsData } = await supabase.from('assignment_submissions').select('*');
-    
-    // НОВЕ: Завантажуємо пости для стрічки
     const { data: postsData } = await supabase.from('class_posts').select('*').order('created_at', { ascending: false });
 
     return (classesData || []).map(c => {
       const classStudents = (studentsData || []).filter(s => s.class_id === c.id);
       const classAssignments = (assignmentsData || []).filter(a => a.class_id === c.id);
-      
-      // НОВЕ: Фільтруємо пости для конкретного класу
       const classPosts = (postsData || []).filter(p => p.class_id === c.id);
 
       return {
@@ -51,7 +47,6 @@ export async function fetchAllClasses(): Promise<ClassItem[]> {
               late: s.late
             }))
         })),
-        // НОВЕ: Мапимо пости у формат, який очікує компонент
         posts: classPosts.map(p => ({
           id: p.id,
           kind: p.kind,
@@ -70,18 +65,24 @@ export async function fetchAllClasses(): Promise<ClassItem[]> {
 export async function createClassInDb(classItem: ClassItem): Promise<boolean> {
   if (!supabase) return false;
   try {
-    await supabase.from('classes').insert({
+    // 🔥 ВИПРАВЛЕНО: Отримуємо реальний ID вчителя з сесії
+    const { data: { user } } = await supabase.auth.getUser();
+    const realTeacherId = user?.id || 'teacher-001';
+
+    const { error } = await supabase.from('classes').insert({
       id: classItem.id,
       name: classItem.name,
       section: classItem.section,
       code: classItem.code,
-      teacher_id: 'teacher-001',
+      teacher_id: realTeacherId, // 🔥 Використовуємо реальний ID
       teacher_name: classItem.teacherName,
       accept_joins: classItem.acceptJoins
     });
+    
+    if (error) throw error;
     return true;
-  } catch (e) {
-    console.error('Помилка створення класу:', e);
+  } catch (e: any) {
+    console.error('Помилка створення класу:', e.message);
     return false;
   }
 }
