@@ -1,7 +1,7 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import TestPlayer from './TestPlayer';
 import type { Answer } from '../lib/nmt';
-import { supabase } from '../lib/supabase'; // 🔥 Імпорт supabase
+import { supabase } from '../lib/supabase';
 import {
   avgTwelve,
   extractCode,
@@ -17,9 +17,8 @@ import {
 } from '../lib/classroom';
 import { GradeBadge, MyJournal, Stream, StatusPill, Tabs, type JournalEntry } from './ClassroomShared';
 import { useAccess } from './AccessUI';
-import { Lock, CheckCircle2, UserPlus, Info } from 'lucide-react';
+import { Lock, CheckCircle2, UserPlus, Info, ChevronLeft, AlertCircle, CheckCircle } from 'lucide-react';
 
-// ІМПОРТ ФУНКЦІЙ ДЛЯ БАЗИ ДАНИХ
 import { addStudentToClass, saveSubmissionToDb } from '../lib/classroomRepository';
 
 type Props = {
@@ -35,7 +34,17 @@ type StudentView = 'classes' | 'homework' | 'journal';
 type ClassTab = 'work' | 'stream' | 'journal';
 type HwItem = { cls: ClassItem; a: Assignment; status: HwStatus; sub?: Submission };
 type Finish = { total: number; max: number; items: { id: number; score: number; max: number }[]; answers: Record<number, Answer> };
-type TestResultData = { score: number; max: number; title: string; className: string };
+
+// 🔥 ОНОВЛЕНО: Додано поля для перегляду помилок
+type TestResultData = { 
+  score: number; 
+  max: number; 
+  title: string; 
+  className: string;
+  questions: any[]; 
+  items: any[]; 
+  answers: any; 
+};
 
 const CLASS_TABS: [ClassTab, string][] = [
   ['work', '📝 Домашні тести'],
@@ -50,6 +59,40 @@ const sortHw = (x: HwItem, y: HwItem) => {
   if (rank(x.status) !== rank(y.status)) return rank(x.status) - rank(y.status);
   if (x.status === 'done') return (y.sub?.submittedAt ?? '').localeCompare(x.sub?.submittedAt ?? '');
   return (x.a.due ?? '9999').localeCompare(y.a.due ?? '9999');
+};
+
+// Форматування правильної відповіді для перегляду
+const getCorrectAnswerString = (q: any) => {
+  if (q.type === 'matching') return 'Правильні пари вказані у питанні';
+  if (q.type === 'sequence') return 'Правильний порядок вказано у питанні';
+  if (q.options) {
+    const correct = q.options.filter((o: any) => o.isCorrect);
+    if (correct.length > 0) return correct.map((o: any) => o.text || o.label).join(', ');
+  }
+  return q.correctAnswer || q.correctAnswers || '—';
+};
+
+// Форматування відповіді учня
+const getUserAnswerString = (ans: any, q: any) => {
+  if (ans === undefined || ans === null || ans === '') return 'Немає відповіді';
+  if (typeof ans === 'string') {
+    if (q.options) {
+       const opt = q.options.find((o: any) => String(o.id) === ans || o.text === ans);
+       if (opt) return opt.text || opt.label;
+    }
+    return ans;
+  }
+  if (Array.isArray(ans)) {
+    return ans.map(a => {
+      if (typeof a === 'string' && q.options) {
+        const opt = q.options.find((o: any) => String(o.id) === a || o.text === a);
+        if (opt) return opt.text || opt.label;
+      }
+      return typeof a === 'object' ? (a.text || a.id) : a;
+    }).join(', ');
+  }
+  if (typeof ans === 'object') return ans.text || JSON.stringify(ans);
+  return String(ans);
 };
 
 function HomeworkRow({ item, showClass, onStart }: { item: HwItem; showClass: boolean; onStart: () => void }) {
@@ -106,8 +149,10 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
   
   const [filter, setFilter] = useState<'all' | HwStatus>('all');
   const [testResult, setTestResult] = useState<TestResultData | null>(null);
+  
+  // 🔥 Стан для перегляду помилок
+  const [reviewMode, setReviewMode] = useState(false);
 
-  // 🔥 Автоматичне підтягування коду класу з посилання
   useEffect(() => {
     if (joinCode) setCodeInput(joinCode);
   }, [joinCode]);
@@ -117,7 +162,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
   
   const mine = safeClasses.filter(c => c.students?.some(s => s.id === safeStudent.id));
 
-  // Розпізнавання класу за кодом
   const targetClass = safeClasses.find(x => x.code === extractCode(codeInput));
   const isAlreadyJoined = targetClass?.students?.some(s => s.id === safeStudent.id);
 
@@ -132,7 +176,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
 
   const countOf = (s: HwStatus) => allHw.filter(h => h.status === s).length;
 
-  // 🔥 ОНОВЛЕНО: Приєднання до класу з прямим запитом до бази
   const join = async () => {
     setJoinError('');
     const name = nameInput.trim();
@@ -149,13 +192,10 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
 
     let clsToJoin = targetClass;
 
-    // Якщо класу немає в локальному списку, шукаємо його напряму в Supabase
     if (!clsToJoin) {
       try {
-        // 🔥 ВИПРАВЛЕНО: Додано знак оклику ! після supabase
         const { data } = await supabase!.from('classes').select('*').eq('code', code).maybeSingle();
         if (data) {
-           // Якщо в базі дані лежать у колонці 'data'
            clsToJoin = (data as any).data ? (data as any).data : (data as ClassItem);
         }
       } catch (e) {
@@ -176,11 +216,10 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
 
     onStudentNameChange(name);
     
-    // Оновлюємо локальний UI
     setClasses(prev => {
       const exists = prev.some(c => c.id === clsToJoin!.id);
       if (!exists) {
-        return [...prev, clsToJoin!]; // Додаємо новий клас
+        return [...prev, clsToJoin!];
       }
       return prev.map(x =>
         x.id !== clsToJoin!.id
@@ -200,8 +239,11 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
     setOpenId(clsToJoin.id);
     setClassTab('work');
 
-    // ЗБЕРЕЖЕННЯ В БАЗУ SUPABASE
-    await addStudentToClass(clsToJoin.id, safeStudent.id, name);
+    const success = await addStudentToClass(clsToJoin.id, safeStudent.id, name);
+    
+    if (!success) {
+      alert("Помилка! Не вдалося зберегти вас у базу даних. Скажіть вчителю перевірити налаштування Supabase.");
+    }
   };
 
   const leaveClass = (c: ClassItem) => {
@@ -246,12 +288,18 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
 
     setPlaying(null);
     const targetClass = safeClasses.find(c => c.id === classId);
+    
+    // 🔥 Зберігаємо деталі для перегляду помилок
     setTestResult({
       score: res.total,
       max: res.max,
       title: a.title,
-      className: targetClass?.name || ''
+      className: targetClass?.name || '',
+      questions: a.questions || [],
+      items: res.items,
+      answers: res.answers
     });
+    setReviewMode(false); // Скидаємо режим перегляду при новому результаті
 
     await saveSubmissionToDb(a.id, safeStudent.id, safeStudent.name || 'Учень', res.total, res.max, res.items, res.answers, late);
   };
@@ -371,31 +419,128 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
           </div>
         </div>
 
+        {/* 🔥 ОНОВЛЕНЕ ВІКНО РЕЗУЛЬТАТІВ З МОЖЛИВІСТЮ ПЕРЕГЛЯНУТИ ПОМИЛКИ */}
         {testResult && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center space-y-6 animate-in zoom-in-95 duration-200">
-              <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">Тест завершено!</h2>
-                <p className="text-sm text-slate-500 mt-1">{testResult.title}</p>
-              </div>
-              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ваш результат</p>
-                <p className="text-5xl font-black text-teal-600">
-                  {testResult.score} <span className="text-2xl text-slate-400">/ {testResult.max}</span>
-                </p>
-                <p className="text-sm font-bold text-slate-500 mt-2">
-                  Це {Math.round((testResult.score / testResult.max) * 100) || 0}% правильних відповідей
-                </p>
-              </div>
-              <button
-                onClick={() => setTestResult(null)}
-                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition shadow-sm"
-              >
-                Повернутися до завдань
-              </button>
+            <div className={`bg-white rounded-3xl shadow-2xl w-full p-8 space-y-6 animate-in zoom-in-95 duration-200 ${reviewMode ? 'max-w-2xl max-h-[90vh] overflow-y-auto' : 'max-w-sm text-center'}`}>
+              
+              {!reviewMode ? (
+                // Екран результатів
+                <>
+                  <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
+                    <CheckCircle2 className="w-10 h-10" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900">Тест завершено!</h2>
+                    <p className="text-sm text-slate-500 mt-1">{testResult.title}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ваш результат</p>
+                    <p className="text-5xl font-black text-teal-600">
+                      {testResult.score} <span className="text-2xl text-slate-400">/ {testResult.max}</span>
+                    </p>
+                    <p className="text-sm font-bold text-slate-500 mt-2">
+                      Це {Math.round((testResult.score / testResult.max) * 100) || 0}% правильних відповідей
+                    </p>
+                  </div>
+                  
+                  <div className="flex flex-col gap-3 pt-2">
+                    <button
+                      onClick={() => setReviewMode(true)}
+                      className="w-full py-3.5 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-xl transition shadow-sm flex items-center justify-center gap-2"
+                    >
+                      <AlertCircle className="w-5 h-5" /> Переглянути помилки
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTestResult(null);
+                        setClassTab('work');
+                      }}
+                      className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition shadow-sm"
+                    >
+                      Завершити і повернутися до класу
+                    </button>
+                  </div>
+                </>
+              ) : (
+                // Екран перегляду помилок
+                <>
+                  <div className="flex items-center gap-3 mb-6">
+                    <button onClick={() => setReviewMode(false)} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition text-slate-700">
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900">Робота над помилками</h2>
+                      <p className="text-xs text-slate-500">{testResult.title}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {testResult.questions.map((q: any, idx: number) => {
+                      const item = testResult.items[idx];
+                      const isCorrect = item && item.score === item.max;
+                      
+                      if (isCorrect) return null; // Показуємо лише помилки
+                      
+                      const userAns = testResult.answers[idx];
+                      const correctAns = getCorrectAnswerString(q);
+
+                      return (
+                        <div key={idx} className="bg-red-50/50 border border-red-200 rounded-2xl p-5 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <span className="w-6 h-6 bg-red-200 text-red-800 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">
+                              {idx + 1}
+                            </span>
+                            <div className="flex-1">
+                              <p className="font-bold text-slate-900 text-sm leading-snug">{q.text || q.prompt || 'Питання без тексту'}</p>
+                              
+                              <div className="mt-3 space-y-2 text-sm">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-red-600 font-bold shrink-0">Ваша відповідь:</span>
+                                  <span className="text-red-700 line-through decoration-red-300">{getUserAnswerString(userAns, q)}</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <span className="text-emerald-600 font-bold shrink-0">Правильна відповідь:</span>
+                                  <span className="text-emerald-700 font-medium">{correctAns}</span>
+                                </div>
+                                {q.comment && (
+                                  <div className="mt-2 pt-2 border-t border-red-200/50 text-xs text-slate-600 bg-white/50 p-2 rounded-lg">
+                                    <b>Коментар:</b> {q.comment}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    
+                    {/* Якщо помилок немає */}
+                    {testResult.questions.every((_: any, idx: number) => testResult.items[idx]?.score === testResult.items[idx]?.max) && (
+                      <div className="text-center py-10 space-y-3">
+                        <div className="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
+                          <CheckCircle className="w-8 h-8" />
+                        </div>
+                        <p className="text-lg font-bold text-slate-800">Ідеальний результат!</p>
+                        <p className="text-sm text-slate-500">Ви не зробили жодної помилки.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-200">
+                    <button
+                      onClick={() => {
+                        setTestResult(null);
+                        setReviewMode(false);
+                        setClassTab('work');
+                      }}
+                      className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition shadow-sm"
+                    >
+                      Завершити і повернутися до класу
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -570,31 +715,117 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
         </section>
       </div>
 
+      {/* 🔥 ОНОВЛЕНЕ ВІКНО РЕЗУЛЬТАТІВ (для загального списку) */}
       {testResult && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center space-y-6 animate-in zoom-in-95 duration-200">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900">Тест завершено!</h2>
-              <p className="text-sm text-slate-500 mt-1">{testResult.title}</p>
-            </div>
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ваш результат</p>
-              <p className="text-5xl font-black text-teal-600">
-                {testResult.score} <span className="text-2xl text-slate-400">/ {testResult.max}</span>
-              </p>
-              <p className="text-sm font-bold text-slate-500 mt-2">
-                Це {Math.round((testResult.score / testResult.max) * 100) || 0}% правильних відповідей
-              </p>
-            </div>
-            <button
-              onClick={() => setTestResult(null)}
-              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition shadow-sm"
-            >
-              Повернутися до завдань
-            </button>
+          <div className={`bg-white rounded-3xl shadow-2xl w-full p-8 space-y-6 animate-in zoom-in-95 duration-200 ${reviewMode ? 'max-w-2xl max-h-[90vh] overflow-y-auto' : 'max-w-sm text-center'}`}>
+            
+            {!reviewMode ? (
+              <>
+                <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900">Тест завершено!</h2>
+                  <p className="text-sm text-slate-500 mt-1">{testResult.title}</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ваш результат</p>
+                  <p className="text-5xl font-black text-teal-600">
+                    {testResult.score} <span className="text-2xl text-slate-400">/ {testResult.max}</span>
+                  </p>
+                  <p className="text-sm font-bold text-slate-500 mt-2">
+                    Це {Math.round((testResult.score / testResult.max) * 100) || 0}% правильних відповідей
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 pt-2">
+                  <button
+                    onClick={() => setReviewMode(true)}
+                    className="w-full py-3.5 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-xl transition shadow-sm flex items-center justify-center gap-2"
+                  >
+                    <AlertCircle className="w-5 h-5" /> Переглянути помилки
+                  </button>
+                  <button
+                    onClick={() => setTestResult(null)}
+                    className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition shadow-sm"
+                  >
+                    Завершити і повернутися
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-6">
+                  <button onClick={() => setReviewMode(false)} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition text-slate-700">
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">Робота над помилками</h2>
+                    <p className="text-xs text-slate-500">{testResult.title}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {testResult.questions.map((q: any, idx: number) => {
+                    const item = testResult.items[idx];
+                    const isCorrect = item && item.score === item.max;
+                    
+                    if (isCorrect) return null;
+                    
+                    const userAns = testResult.answers[idx];
+                    const correctAns = getCorrectAnswerString(q);
+
+                    return (
+                      <div key={idx} className="bg-red-50/50 border border-red-200 rounded-2xl p-5 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <span className="w-6 h-6 bg-red-200 text-red-800 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="flex-1">
+                            <p className="font-bold text-slate-900 text-sm leading-snug">{q.text || q.prompt || 'Питання без тексту'}</p>
+                            
+                            <div className="mt-3 space-y-2 text-sm">
+                              <div className="flex items-start gap-2">
+                                <span className="text-red-600 font-bold shrink-0">Ваша відповідь:</span>
+                                <span className="text-red-700 line-through decoration-red-300">{getUserAnswerString(userAns, q)}</span>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <span className="text-emerald-600 font-bold shrink-0">Правильна відповідь:</span>
+                                <span className="text-emerald-700 font-medium">{correctAns}</span>
+                              </div>
+                              {q.comment && (
+                                <div className="mt-2 pt-2 border-t border-red-200/50 text-xs text-slate-600 bg-white/50 p-2 rounded-lg">
+                                  <b>Коментар:</b> {q.comment}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {testResult.questions.every((_: any, idx: number) => testResult.items[idx]?.score === testResult.items[idx]?.max) && (
+                    <div className="text-center py-10 space-y-3">
+                      <div className="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
+                        <CheckCircle className="w-8 h-8" />
+                      </div>
+                      <p className="text-lg font-bold text-slate-800">Ідеальний результат!</p>
+                      <p className="text-sm text-slate-500">Ви не зробили жодної помилки.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-slate-200">
+                  <button
+                    onClick={() => { setTestResult(null); setReviewMode(false); }}
+                    className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition shadow-sm"
+                  >
+                    Завершити і повернутися
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
