@@ -22,10 +22,10 @@ export async function fetchAllClasses(): Promise<ClassItem[]> {
       return {
         id: c.id,
         name: c.name,
-        section: c.section,
+        section: c.section || '',
         code: c.code,
-        teacherName: c.teacher_name,
-        acceptJoins: c.accept_joins,
+        teacherName: c.teacher_name || 'Вчитель',
+        acceptJoins: c.accept_joins !== false, // 🔥 Якщо null або undefined, то true
         students: classStudents.map(s => ({ id: s.student_id, name: s.student_name })),
         assignments: classAssignments.map(a => ({
           id: a.id,
@@ -75,7 +75,7 @@ export async function createClassInDb(classItem: ClassItem): Promise<boolean> {
       code: classItem.code,
       teacher_id: realTeacherId,
       teacher_name: classItem.teacherName,
-      accept_joins: classItem.acceptJoins
+      accept_joins: true // 🔥 Завжди відкрито при створенні
     });
     
     if (error) throw error;
@@ -126,7 +126,7 @@ export async function addStudentToClass(classId: string, studentId: string, stud
       student_id: studentId,
       student_name: studentName
     });
-    if (error) throw error; // 🔥 ТЕПЕР МИ БАЧИМО ПОМИЛКУ
+    if (error) throw error;
     return true;
   } catch (e) {
     console.error('Помилка додавання учня:', e);

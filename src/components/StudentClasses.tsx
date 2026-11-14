@@ -35,7 +35,6 @@ type ClassTab = 'work' | 'stream' | 'journal';
 type HwItem = { cls: ClassItem; a: Assignment; status: HwStatus; sub?: Submission };
 type Finish = { total: number; max: number; items: { id: number; score: number; max: number }[]; answers: Record<number, Answer> };
 
-// 🔥 ОНОВЛЕНО: Додано поля для перегляду помилок
 type TestResultData = { 
   score: number; 
   max: number; 
@@ -61,7 +60,6 @@ const sortHw = (x: HwItem, y: HwItem) => {
   return (x.a.due ?? '9999').localeCompare(y.a.due ?? '9999');
 };
 
-// Форматування правильної відповіді для перегляду
 const getCorrectAnswerString = (q: any) => {
   if (q.type === 'matching') return 'Правильні пари вказані у питанні';
   if (q.type === 'sequence') return 'Правильний порядок вказано у питанні';
@@ -72,7 +70,6 @@ const getCorrectAnswerString = (q: any) => {
   return q.correctAnswer || q.correctAnswers || '—';
 };
 
-// Форматування відповіді учня
 const getUserAnswerString = (ans: any, q: any) => {
   if (ans === undefined || ans === null || ans === '') return 'Немає відповіді';
   if (typeof ans === 'string') {
@@ -150,7 +147,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
   const [filter, setFilter] = useState<'all' | HwStatus>('all');
   const [testResult, setTestResult] = useState<TestResultData | null>(null);
   
-  // 🔥 Стан для перегляду помилок
   const [reviewMode, setReviewMode] = useState(false);
 
   useEffect(() => {
@@ -209,11 +205,22 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
     }
     
     const isJoined = clsToJoin.students?.some(s => s.id === safeStudent.id);
-    if (!isJoined && !clsToJoin.acceptJoins) {
+    
+    // 🔥 ВИПРАВЛЕНО: Перевіряємо саме === false, щоб null не блокував вхід
+    if (!isJoined && clsToJoin.acceptJoins === false) {
       setJoinError('Вчитель тимчасово закрив набір до цього класу.');
       return;
     }
 
+    // 🔥 ВИПРАВЛЕНО: Спочатку зберігаємо в БАЗУ
+    const success = await addStudentToClass(clsToJoin.id, safeStudent.id, name);
+    
+    if (!success) {
+      setJoinError('Помилка збереження в базу даних. Зверніться до вчителя або перевірте налаштування Supabase.');
+      return;
+    }
+
+    // Якщо база зберегла — оновлюємо UI
     onStudentNameChange(name);
     
     setClasses(prev => {
@@ -238,12 +245,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
     setView('classes');
     setOpenId(clsToJoin.id);
     setClassTab('work');
-
-    const success = await addStudentToClass(clsToJoin.id, safeStudent.id, name);
-    
-    if (!success) {
-      alert("Помилка! Не вдалося зберегти вас у базу даних. Скажіть вчителю перевірити налаштування Supabase.");
-    }
   };
 
   const leaveClass = (c: ClassItem) => {
@@ -289,7 +290,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
     setPlaying(null);
     const targetClass = safeClasses.find(c => c.id === classId);
     
-    // 🔥 Зберігаємо деталі для перегляду помилок
     setTestResult({
       score: res.total,
       max: res.max,
@@ -299,7 +299,7 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
       items: res.items,
       answers: res.answers
     });
-    setReviewMode(false); // Скидаємо режим перегляду при новому результаті
+    setReviewMode(false);
 
     await saveSubmissionToDb(a.id, safeStudent.id, safeStudent.name || 'Учень', res.total, res.max, res.items, res.answers, late);
   };
@@ -419,13 +419,12 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
           </div>
         </div>
 
-        {/* 🔥 ОНОВЛЕНЕ ВІКНО РЕЗУЛЬТАТІВ З МОЖЛИВІСТЮ ПЕРЕГЛЯНУТИ ПОМИЛКИ */}
+        {/* 🔥 ВІКНО РЕЗУЛЬТАТІВ З ПЕРЕГЛЯДОМ ПОМИЛОК */}
         {testResult && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
             <div className={`bg-white rounded-3xl shadow-2xl w-full p-8 space-y-6 animate-in zoom-in-95 duration-200 ${reviewMode ? 'max-w-2xl max-h-[90vh] overflow-y-auto' : 'max-w-sm text-center'}`}>
               
               {!reviewMode ? (
-                // Екран результатів
                 <>
                   <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-100">
                     <CheckCircle2 className="w-10 h-10" />
@@ -463,7 +462,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
                   </div>
                 </>
               ) : (
-                // Екран перегляду помилок
                 <>
                   <div className="flex items-center gap-3 mb-6">
                     <button onClick={() => setReviewMode(false)} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition text-slate-700">
@@ -480,7 +478,7 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
                       const item = testResult.items[idx];
                       const isCorrect = item && item.score === item.max;
                       
-                      if (isCorrect) return null; // Показуємо лише помилки
+                      if (isCorrect) return null;
                       
                       const userAns = testResult.answers[idx];
                       const correctAns = getCorrectAnswerString(q);
@@ -515,7 +513,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
                       );
                     })}
                     
-                    {/* Якщо помилок немає */}
                     {testResult.questions.every((_: any, idx: number) => testResult.items[idx]?.score === testResult.items[idx]?.max) && (
                       <div className="text-center py-10 space-y-3">
                         <div className="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
@@ -715,7 +712,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
         </section>
       </div>
 
-      {/* 🔥 ОНОВЛЕНЕ ВІКНО РЕЗУЛЬТАТІВ (для загального списку) */}
       {testResult && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className={`bg-white rounded-3xl shadow-2xl w-full p-8 space-y-6 animate-in zoom-in-95 duration-200 ${reviewMode ? 'max-w-2xl max-h-[90vh] overflow-y-auto' : 'max-w-sm text-center'}`}>
