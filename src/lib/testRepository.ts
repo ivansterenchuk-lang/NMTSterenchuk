@@ -25,7 +25,7 @@ const ATTEMPT_COLUMNS =
   'id, test_id, session_id, student_name, answers, notebooks, notebook_reviews, score, max_score, created_at';
 
 export async function fetchTests(): Promise<Test[]> {
-  const { data, error } = await supabase
+  const { data, error } = await supabase! // 🔥 Додано !
     .from('tests')
     .select(TEST_COLUMNS)
     .order('created_at', { ascending: false });
@@ -34,7 +34,7 @@ export async function fetchTests(): Promise<Test[]> {
 }
 
 export async function fetchTest(id: string): Promise<Test | null> {
-  const { data, error } = await supabase
+  const { data, error } = await supabase! // 🔥 Додано !
     .from('tests')
     .select(TEST_COLUMNS)
     .eq('id', id)
@@ -44,7 +44,7 @@ export async function fetchTest(id: string): Promise<Test | null> {
 }
 
 export async function createTest(input: TestInput): Promise<Test> {
-  const { data, error } = await supabase
+  const { data, error } = await supabase! // 🔥 Додано !
     .from('tests')
     .insert({
       title: input.title,
@@ -60,7 +60,7 @@ export async function createTest(input: TestInput): Promise<Test> {
 }
 
 export async function updateTest(id: string, input: TestInput): Promise<void> {
-  const { error } = await supabase
+  const { error } = await supabase! // 🔥 Додано !
     .from('tests')
     .update({
       title: input.title,
@@ -75,7 +75,7 @@ export async function updateTest(id: string, input: TestInput): Promise<void> {
 
 // 🔥 НОВА ФУНКЦІЯ: Оновлення лише назви тесту
 export async function updateTestTitle(id: string, title: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await supabase! // 🔥 Додано !
     .from('tests')
     .update({ title })
     .eq('id', id);
@@ -83,12 +83,12 @@ export async function updateTestTitle(id: string, title: string): Promise<void> 
 }
 
 export async function deleteTest(id: string): Promise<void> {
-  const { error } = await supabase.from('tests').delete().eq('id', id);
+  const { error } = await supabase!.from('tests').delete().eq('id', id); // 🔥 Додано !
   if (error) throw error;
 }
 
 export async function fetchTestAttempts(testId: string, sessionId?: string): Promise<TestAttempt[]> {
-  let query = supabase
+  let query = supabase! // 🔥 Додано !
     .from('test_attempts')
     .select(ATTEMPT_COLUMNS)
     .eq('test_id', testId);
@@ -100,7 +100,7 @@ export async function fetchTestAttempts(testId: string, sessionId?: string): Pro
 
 export async function fetchAttemptsForTests(testIds: string[]): Promise<TestAttempt[]> {
   if (testIds.length === 0) return [];
-  const { data, error } = await supabase
+  const { data, error } = await supabase! // 🔥 Додано !
     .from('test_attempts')
     .select(ATTEMPT_COLUMNS)
     .in('test_id', testIds);
@@ -123,7 +123,7 @@ export async function appendQuestionToTest(testId: string, question: Question): 
     maxScore:
       isMatchingQuestion(question) && target.scoring_preset === 'nmt' ? NMT_MATCHING_MAX_SCORE : question.maxScore,
   };
-  const { error } = await supabase
+  const { error } = await supabase! // 🔥 Додано !
     .from('tests')
     .update({ questions: [...target.questions, copy] })
     .eq('id', testId);
@@ -140,7 +140,7 @@ export async function saveTestAttempt(attempt: {
   score: number;
   maxScore: number;
 }): Promise<void> {
-  const { error } = await supabase.from('test_attempts').insert({
+  const { error } = await supabase!.from('test_attempts').insert({ // 🔥 Додано !
     test_id: attempt.testId,
     session_id: attempt.sessionId,
     student_name: attempt.studentName,
@@ -161,7 +161,7 @@ export async function saveNotebookReviews(
     (total, question) => total + scoreQuestion(question, attempt.answers, reviews).score,
     0,
   );
-  const { data, error } = await supabase
+  const { data, error } = await supabase! // 🔥 Додано !
     .from('test_attempts')
     .update({ notebook_reviews: reviews, score })
     .eq('id', attempt.id)

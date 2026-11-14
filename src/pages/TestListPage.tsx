@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Plus } from 'lucide-react';
+import { ClipboardList, Plus, CheckCircle2, ListChecks, Link2, ListOrdered, FileText } from 'lucide-react';
 import TestCard from '@/components/library/TestCard';
 import { navigate } from '@/lib/router';
-import { deleteTest, fetchTests } from '@/lib/testRepository';
+import { deleteTest, fetchTests, updateTestTitle } from '@/lib/testRepository';
 import type { BasketItem, Question, Test } from '@/types/test';
 
 interface TestListPageProps {
@@ -43,13 +43,82 @@ export default function TestListPage({ userId, basketItems, onAddToBasket, baske
     }
   };
 
+  // 🔥 НОВЕ: Обробник зміни назви
+  const handleRename = async (testId: string, newTitle: string) => {
+    try {
+      await updateTestTitle(testId, newTitle);
+      // Оновлюємо локальний стан, щоб не перезавантажувати сторінку
+      setTests((prev) => 
+        prev ? prev.map(t => t.id === testId ? { ...t, title: newTitle } : t) : null
+      );
+    } catch (err) {
+      setCardError('Не вдалося змінити назву тесту. Спробуйте ще раз.');
+    }
+  };
+
   const ownTests = tests?.filter((t) => t.owner_id === userId) ?? [];
   const libraryTests = tests?.filter((t) => t.owner_id !== userId) ?? [];
 
   const error = loadError ?? cardError ?? basketError;
 
+  // 🔥 Пункт 9: Розрахунок статистики для плаваючого вікна
+  const stats = useMemo(() => {
+    const res = { single: 0, multiple: 0, matching: 0, sequence: 0, notebook: 0, total: 0 };
+    ownTests.forEach(test => {
+      test.questions.forEach(q => {
+        res.total++;
+        // Визначаємо тип (з урахуванням сумісності старих тестів)
+        const type = (q as any).type;
+        if (type === 'matching' || (q as any).leftItems?.length > 0 || (q as any).leftColumn) res.matching++;
+        else if (type === 'single') res.single++;
+        else if (type === 'multiple') res.multiple++;
+        else if (type === 'sequence') res.sequence++;
+        else res.notebook++; // Якщо тип невідомий (наприклад, зошит)
+      });
+    });
+    return res;
+  }, [ownTests]);
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:pr-64 relative">
+      
+      {/* 🔥 Пункт 9: Плаваюче вікно зі статистикою (видно тільки на великих екранах) */}
+      {ownTests.length > 0 && (
+        <div className="hidden lg:block fixed right-6 top-24 w-56 bg-white rounded-2xl border border-slate-200 shadow-xl p-5 z-10">
+          <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3 flex items-center gap-2">
+            📊 Ваша статистика
+          </h3>
+          <div className="space-y-2.5 text-sm">
+            <div className="flex justify-between items-center text-slate-600">
+              <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/> Одна відп.</span>
+              <span className="font-bold text-slate-900">{stats.single}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-600">
+              <span className="flex items-center gap-1.5"><ListChecks className="w-4 h-4 text-blue-500"/> Множинний</span>
+              <span className="font-bold text-slate-900">{stats.multiple}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-600">
+              <span className="flex items-center gap-1.5"><Link2 className="w-4 h-4 text-purple-500"/> Відповідність</span>
+              <span className="font-bold text-slate-900">{stats.matching}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-600">
+              <span className="flex items-center gap-1.5"><ListOrdered className="w-4 h-4 text-amber-500"/> Послідовність</span>
+              <span className="font-bold text-slate-900">{stats.sequence}</span>
+            </div>
+            {stats.notebook > 0 && (
+              <div className="flex justify-between items-center text-slate-600">
+                <span className="flex items-center gap-1.5"><FileText className="w-4 h-4 text-slate-500"/> Зошит</span>
+                <span className="font-bold text-slate-900">{stats.notebook}</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-slate-900">
+            <span>Всього:</span>
+            <span className="text-teal-600 text-lg">{stats.total}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-medium text-teal-700">Бібліотека тестів</p>
@@ -93,6 +162,7 @@ export default function TestListPage({ userId, basketItems, onAddToBasket, baske
                 inBasket={inBasket}
                 onAddToBasket={onAddToBasket}
                 onDelete={handleDelete}
+                onRename={handleRename} // 🔥 Передаємо функцію зміни назви
                 busy={busyId === test.id}
                 onError={setCardError}
               />
@@ -113,6 +183,7 @@ export default function TestListPage({ userId, basketItems, onAddToBasket, baske
                 inBasket={inBasket}
                 onAddToBasket={onAddToBasket}
                 onDelete={handleDelete}
+                onRename={handleRename} 
                 busy={busyId === test.id}
                 onError={setCardError}
               />
