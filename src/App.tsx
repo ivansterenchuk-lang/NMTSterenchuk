@@ -30,7 +30,7 @@ import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import CommunityTestViewModal from './components/CommunityTestViewModal';
 import LandingPage from './components/LandingPage';
-import { LogOut } from 'lucide-react';
+import { LogOut, Pencil, CheckCircle2, ListChecks, Link2, ListOrdered } from 'lucide-react';
 
 type LibraryItem = { id: number; title: string; type: 'group' | 'folder'; questions?: Question[]; isPublic?: boolean; };
 
@@ -70,6 +70,30 @@ const DEFAULT_LIBRARY: LibraryItem[] = [
   { id: 4, title: 'Історія 10 клас', type: 'folder', questions: [] },
   { id: 5, title: 'Історія України. Завдання за роками', type: 'group', questions: [] }
 ];
+
+// 🔧 Хелпер для іконок типів питань (ВИПРАВЛЕНО: title обгорнуто в span)
+const getQuestionTypeIcons = (questions?: Question[]) => {
+  if (!questions || questions.length === 0) return null;
+  
+  let hasSingle = false, hasMultiple = false, hasMatching = false, hasSequence = false;
+
+  questions.forEach(q => {
+    const type = (q as any).type;
+    if (type === 'matching' || (q as any).leftItems?.length > 0 || (q as any).leftColumn) hasMatching = true;
+    else if (type === 'sequence') hasSequence = true;
+    else if (type === 'multiple') hasMultiple = true;
+    else hasSingle = true; // Дефолтний (одна відповідь або зошит)
+  });
+
+  return (
+    <div className="flex items-center gap-1.5 ml-2 text-slate-400">
+      {hasSingle && <span title="Одна відповідь"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /></span>}
+      {hasMultiple && <span title="Множинний вибір"><ListChecks className="w-3.5 h-3.5 text-blue-500" /></span>}
+      {hasMatching && <span title="Відповідність"><Link2 className="w-3.5 h-3.5 text-purple-500" /></span>}
+      {hasSequence && <span title="Послідовність"><ListOrdered className="w-3.5 h-3.5 text-amber-500" /></span>}
+    </div>
+  );
+};
 
 export default function App() {
   const [route, setRoute] = useState<string>(() => window.location.hash);
@@ -254,6 +278,10 @@ export default function App() {
   const [editingMeetingSession, setEditingMeetingSession] = useState<SessionItem | null>(null);
   const [inspectDetails, setInspectDetails] = useState<{ studentName: string; question: Question; isCorrect: boolean; qIndex: number; } | null>(null);
 
+  // 🔥 СТАНИ ДЛЯ РЕДАГУВАННЯ НАЗВ У БІБЛІОТЕЦІ
+  const [editingLibId, setEditingLibId] = useState<number | null>(null);
+  const [editingLibTitle, setEditingLibTitle] = useState('');
+
   // ───── БІБЛІОТЕКА (БАЗА ДАНИХ) ─────
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
   const [libraryLoaded, setLibraryLoaded] = useState(false);
@@ -263,13 +291,15 @@ export default function App() {
     setLibraryLoaded(false);
     const fetchLib = async () => {
       try {
-        const { data, error } = await supabase.from('libraries').select('items').eq('teacher_id', currentUserId).maybeSingle();
+        // 🔥 Додано ! після supabase
+        const { data, error } = await supabase!.from('libraries').select('items').eq('teacher_id', currentUserId).maybeSingle();
         if (error) throw error;
         if (data && data.items) {
           setLibraryItems(data.items as LibraryItem[]);
         } else {
           setLibraryItems(DEFAULT_LIBRARY);
-          await supabase.from('libraries').insert({ teacher_id: currentUserId, items: DEFAULT_LIBRARY });
+          // 🔥 Додано ! після supabase
+          await supabase!.from('libraries').insert({ teacher_id: currentUserId, items: DEFAULT_LIBRARY });
         }
       } catch (err) {
         console.error('Помилка завантаження бібліотеки:', err);
@@ -283,7 +313,8 @@ export default function App() {
   useEffect(() => {
     if (!authReady || !libraryLoaded || !currentUserId || !supabase) return;
     const timeout = setTimeout(async () => {
-      const { error } = await supabase.from('libraries').upsert({ 
+      // 🔥 Додано ! після supabase
+      const { error } = await supabase!.from('libraries').upsert({ 
         teacher_id: currentUserId, 
         items: libraryItems,
         updated_at: new Date().toISOString()
@@ -320,7 +351,8 @@ export default function App() {
     if (!authReady || !currentUserId || !supabase) return;
     const fetchSessions = async () => {
       try {
-        const { data, error } = await supabase.from('sessions').select('data').eq('teacher_id', currentUserId).order('created_at', { ascending: false });
+        // 🔥 Додано ! після supabase
+        const { data, error } = await supabase!.from('sessions').select('data').eq('teacher_id', currentUserId).order('created_at', { ascending: false });
         if (error) throw error;
         if (data) setActiveSessions(data.map((row: any) => row.data as SessionItem));
       } catch (err) {
@@ -344,7 +376,8 @@ export default function App() {
     }
 
     let isMounted = true;
-    supabase.from('sessions').select('data').ilike('id', sessionCode.trim()).maybeSingle()
+    // 🔥 Додано ! після supabase
+    supabase!.from('sessions').select('data').ilike('id', sessionCode.trim()).maybeSingle()
       .then(({ data }) => {
         if (isMounted && data && data.data) setFetchedSession(data.data as SessionItem);
         else if (isMounted) setFetchedSession(null);
@@ -389,7 +422,8 @@ export default function App() {
         return s;
       });
       const sess = updated.find(s => s.id === id);
-      if (supabase && sess) supabase.from('sessions').update({ data: sess }).eq('id', id).then();
+      // 🔥 Додано ! після supabase
+      if (supabase && sess) supabase!.from('sessions').update({ data: sess }).eq('id', id).then();
       return updated;
     });
     if (selectedSessionForLive?.id === id) setSelectedSessionForLive(prev => prev ? { ...prev, status: prev.status === 'Активна' ? 'Завершена' : 'Активна', isLive: false } : null);
@@ -402,7 +436,8 @@ export default function App() {
       onConfirm: async () => { 
         setActiveSessions(prev => prev.filter(s => s.id !== id)); 
         if (selectedSessionForLive?.id === id) setSelectedSessionForLive(null); 
-        if (supabase) await supabase.from('sessions').delete().eq('id', id);
+        // 🔥 Додано ! після supabase
+        if (supabase) await supabase!.from('sessions').delete().eq('id', id);
         notify('Сесію видалено'); 
       }
     });
@@ -423,6 +458,14 @@ export default function App() {
     });
   };
 
+  // 🔥 ФУНКЦІЯ ЗБЕРЕЖЕННЯ ЗМІНЕНОЇ НАЗВИ
+  const handleSaveLibTitle = (id: number) => {
+    if (editingLibTitle.trim() !== '') {
+      setLibraryItems(prev => prev.map(item => item.id === id ? { ...item, title: editingLibTitle.trim() } : item));
+    }
+    setEditingLibId(null);
+  };
+
   const togglePublic = (id: number, e?: React.MouseEvent) => { e?.stopPropagation(); const item = libraryItems.find(i => i.id === id); if (!item) return; if (!item.isPublic && (item.questions?.length ?? 0) === 0) { notify('Спершу додайте хоча б одне питання!'); return; } const updated: LibraryItem = { ...item, isPublic: !item.isPublic }; setLibraryItems(libraryItems.map(i => (i.id === id ? updated : i))); if (selectedFolder?.id === id) setSelectedFolder(updated); };
   const importPublicTest = (t: PublicTest) => { const base = Date.now(); const copy: LibraryItem = { id: base, title: `${t.title} (від ${t.author})`, type: 'group', isPublic: false, questions: t.questions.map((q, i) => ({ ...q, id: base + i + 1 })) }; setLibraryItems([...libraryItems, copy]); notify(`Тест «${t.title}» додано до вашої бібліотеки (${t.questions.length} пит.).`); };
   const openNewQuestion = () => { setEditingQuestion(null); setIsQuestionModalOpen(true); };
@@ -439,7 +482,7 @@ export default function App() {
   const goTab = (tab: Tab) => { setSelectedSessionForLive(null); setSelectedFolder(null); setActiveTab(tab); };
   const navCls = (tab: Tab) => `transition cursor-pointer py-1 ${activeTab === tab ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-500 hover:text-slate-900'}`;
   const exitAdmin = () => { try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch {} setRoute(''); };
-  const handleLogout = async () => { try { if (supabase) await supabase.auth.signOut(); } catch {} setShowLanding(true); setSelectedSessionForLive(null); setSelectedFolder(null); setActiveTab('sessions'); };
+  const handleLogout = async () => { try { if (supabase) await supabase!.auth.signOut(); } catch {} setShowLanding(true); setSelectedSessionForLive(null); setSelectedFolder(null); setActiveTab('sessions'); };
 
   if (route === '#admin' || route.startsWith('#admin/')) {
     if (!adminAuthed) return <AdminLogin onSuccess={() => { setAdminSession(true); setAdminAuthed(true); }} onExit={exitAdmin} />;
@@ -456,6 +499,19 @@ export default function App() {
   }
 
   const displayFirstName = userRole === 'student' ? (studentName ? splitName(studentName).firstName : 'Учень') : userInfo.firstName;
+
+  // 🔥 РОЗРАХУНОК ГЛОБАЛЬНОЇ СТАТИСТИКИ ДЛЯ БІБЛІОТЕКИ
+  const libStats = { single: 0, multiple: 0, matching: 0, sequence: 0, total: 0 };
+  libraryItems.forEach(item => {
+    item.questions?.forEach(q => {
+      libStats.total++;
+      const type = (q as any).type;
+      if (type === 'matching' || (q as any).leftItems?.length > 0 || (q as any).leftColumn) libStats.matching++;
+      else if (type === 'sequence') libStats.sequence++;
+      else if (type === 'multiple') libStats.multiple++;
+      else libStats.single++;
+    });
+  });
 
   return (
     <AccessProvider ent={ent} teacherName={teacherFullName}>
@@ -486,7 +542,7 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full relative">
           {userRole === 'student' ? (
             <StudentView classes={classes} setClasses={setClasses} studentName={studentName} changeStudentName={changeStudentName} pendingJoin={pendingJoin} consumeJoin={consumeJoin} studentSession={studentSession} classSession={classSession} studentFullName={studentFullName} sessionCode={sessionCode} setSessionCode={setSessionCode} notify={notify} ME_ID={ME_ID} />
           ) : (
@@ -536,7 +592,7 @@ export default function App() {
                           setActiveSessions(prev => {
                             const updated = prev.map(s => s.id === selectedSessionForLive.id ? { ...s, isLive: newIsLive } : s);
                             const sess = updated.find(s => s.id === selectedSessionForLive.id);
-                            if (supabase && sess) supabase.from('sessions').update({ data: sess }).eq('id', selectedSessionForLive.id).then();
+                            if (supabase && sess) supabase!.from('sessions').update({ data: sess }).eq('id', selectedSessionForLive.id).then();
                             return updated;
                           });
                           setSelectedSessionForLive(prev => prev ? { ...prev, isLive: newIsLive } : null); 
@@ -619,20 +675,86 @@ export default function App() {
                     </div>
                   )}
                   {activeTab === 'community' && (<CommunitySearch tests={allPublicTests} query={communityQuery} onQueryChange={setCommunityQuery} onImport={importPublicTest} onAssign={(t: any) => setAssignSource(t)} onAddToBasket={addToBasket} onView={(t: any) => setViewingPublicTest(t)} />)}
+                  
+                  {/* 🔥 ОНОВЛЕНА БІБЛІОТЕКА */}
                   {activeTab === 'library' && (
-                    <div className="space-y-6">
+                    <div className="space-y-6 relative">
+                      
+                      {/* 🔥 Пункт 9: Плаваюча статистика */}
+                      <div className="hidden xl:block fixed right-6 top-28 w-60 bg-white rounded-2xl border border-slate-200 shadow-xl p-5 z-10">
+                        <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3 text-sm flex items-center gap-2">
+                          📊 Статистика питань
+                        </h3>
+                        <div className="space-y-3 text-xs">
+                          <div className="flex justify-between items-center text-slate-600">
+                            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/> Одна відп.</span>
+                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.single}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-slate-600">
+                            <span className="flex items-center gap-1.5"><ListChecks className="w-4 h-4 text-blue-500"/> Множинний</span>
+                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.multiple}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-slate-600">
+                            <span className="flex items-center gap-1.5"><Link2 className="w-4 h-4 text-purple-500"/> Відповідність</span>
+                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.matching}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-slate-600">
+                            <span className="flex items-center gap-1.5"><ListOrdered className="w-4 h-4 text-amber-500"/> Послідовність</span>
+                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.sequence}</span>
+                          </div>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-slate-900 text-sm">
+                          <span>Всього:</span>
+                          <span className="text-teal-600 text-lg">{libStats.total}</span>
+                        </div>
+                      </div>
+
                       <h2 className="text-2xl font-black text-slate-900">Моя Бібліотека</h2>
                       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                         <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-6 space-y-3 shadow-sm">
                           {libraryItems.map((item) => (
-                            <div key={item.id} onClick={() => { setSelectedFolder(item); setExpandedQuestionId(null); }} className="flex items-center justify-between gap-3 p-3.5 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-200 transition cursor-pointer">
-                              <div className="flex items-center space-x-3 min-w-0">{item.type === 'group' ? (<span className="w-7 h-7 bg-emerald-500 text-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm shrink-0">ЗНО</span>) : (<span className="text-xl">📁</span>)}<span className="text-sm font-semibold text-slate-800 truncate">{item.title}</span></div>
-                              <div className="flex items-center space-x-3 shrink-0">
-                                <button onClick={(e) => togglePublic(item.id, e)} title="Відкрити або закрити доступ для інших викладачів" className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition cursor-pointer ${item.isPublic ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:text-slate-800'}`}>{item.isPublic ? '🌐 Публічний' : '🔒 Приватний'}</button>
-                                {(item.questions?.length ?? 0) > 0 && (<PrintButton title={item.title} questions={item.questions ?? []} className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-slate-100 text-slate-600 border-slate-200 hover:text-slate-900 transition cursor-pointer">📄 PDF</PrintButton>)}
-                                <span className="text-xs text-slate-400 font-bold">{item.questions?.length ?? 0} пит.</span>
-                                <span className="text-xs text-teal-600 font-bold">Редагувати ➔</span>
-                                <button onClick={(e) => deleteLibraryItem(item.id, e)} className="p-2 text-slate-400 hover:text-rose-500 transition cursor-pointer" title="Видалити">🗑️</button>
+                            <div key={item.id} onClick={() => { setSelectedFolder(item); setExpandedQuestionId(null); }} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-200 transition cursor-pointer">
+                              
+                              {/* ЛІВА ЧАСТИНА: Іконка + Назва (з редагуванням) */}
+                              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                                {item.type === 'group' ? (
+                                  <span className="w-7 h-7 bg-emerald-500 text-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm shrink-0">ЗНО</span>
+                                ) : (
+                                  <span className="text-xl shrink-0">📁</span>
+                                )}
+                                
+                                {editingLibId === item.id ? (
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    value={editingLibTitle}
+                                    onChange={(e) => setEditingLibTitle(e.target.value)}
+                                    onBlur={() => handleSaveLibTitle(item.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveLibTitle(item.id);
+                                      if (e.key === 'Escape') setEditingLibId(null);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex-1 text-sm font-semibold text-slate-900 border-b-2 border-teal-500 outline-none bg-transparent py-0.5"
+                                  />
+                                ) : (
+                                  <div className="flex items-center gap-2 min-w-0 group/title" onClick={(e) => { e.stopPropagation(); setEditingLibId(item.id); setEditingLibTitle(item.title); }}>
+                                    <span className="text-sm font-semibold text-slate-800 truncate group-hover/title:text-teal-700 transition-colors">{item.title}</span>
+                                    <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
+                                  </div>
+                                )}
+                                
+                                {/* Іконки типів питань */}
+                                {getQuestionTypeIcons(item.questions)}
+                              </div>
+
+                              {/* ПРАВА ЧАСТИНА: Кнопки та статус */}
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0 self-end sm:self-center">
+                                <button onClick={(e) => togglePublic(item.id, e)} title="Відкрити або закрити доступ для інших викладачів" className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition cursor-pointer ${item.isPublic ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white text-slate-500 border-slate-200 hover:text-slate-800'}`}>{item.isPublic ? '🌐 Публічний' : '🔒 Приватний'}</button>
+                                {(item.questions?.length ?? 0) > 0 && (<PrintButton title={item.title} questions={item.questions ?? []} className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-white text-slate-600 border-slate-200 hover:text-slate-900 transition cursor-pointer">📄 PDF</PrintButton>)}
+                                <span className="text-[11px] text-slate-500 font-bold whitespace-nowrap bg-slate-100 px-2 py-1 rounded-md">{item.questions?.length ?? 0} пит.</span>
+                                <span className="text-xs text-teal-600 font-bold whitespace-nowrap hidden sm:block">Редагувати ➔</span>
+                                <button onClick={(e) => deleteLibraryItem(item.id, e)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer" title="Видалити">🗑️</button>
                               </div>
                             </div>
                           ))}
@@ -665,8 +787,9 @@ export default function App() {
               onQuestionsChange={qs => setActiveSessions(prev => {
                 const updated = prev.map(x => (x.id === s.id ? { ...x, questions: qs } : x));
                 const sess = updated.find(x => x.id === s.id);
+                // 🔥 Додано ! після supabase
                 if (supabase && sess) {
-                   supabase.from('sessions').update({ data: sess }).eq('id', s.id).then();
+                   supabase!.from('sessions').update({ data: sess }).eq('id', s.id).then();
                 }
                 return updated;
               })} 
@@ -686,8 +809,9 @@ export default function App() {
           
           setActiveSessions(prev => [newSess as any, ...prev]);
           
+          // 🔥 Додано ! після supabase
           if (supabase && currentUserId) {
-            supabase.from('sessions').insert({ 
+            supabase!.from('sessions').insert({ 
               id: code, 
               teacher_id: currentUserId, 
               title: newSess.title, 
@@ -701,9 +825,10 @@ export default function App() {
         <EditSessionModal session={editingSession} onClose={() => setEditingSession(null)} onSave={(id, data) => { 
           setActiveSessions(prev => {
             const updated = prev.map(s => s.id === id ? { ...s, ...data } as SessionItem : s);
+            // 🔥 Додано ! після supabase
             if (supabase) {
                const sess = updated.find(s => s.id === id);
-               if(sess) supabase.from('sessions').update({ data: sess, title: sess.title }).eq('id', id).then();
+               if(sess) supabase!.from('sessions').update({ data: sess, title: sess.title }).eq('id', id).then();
             }
             return updated;
           }); 
@@ -713,9 +838,10 @@ export default function App() {
         <MeetingLinkModal session={editingMeetingSession} onClose={() => setEditingMeetingSession(null)} onSave={(id, url) => { 
           setActiveSessions(prev => {
             const updated = prev.map(s => s.id === id ? { ...s, meetingUrl: url } as SessionItem : s);
+            // 🔥 Додано ! після supabase
             if (supabase) {
                const sess = updated.find(s => s.id === id);
-               if(sess) supabase.from('sessions').update({ data: sess }).eq('id', id).then();
+               if(sess) supabase!.from('sessions').update({ data: sess }).eq('id', id).then();
             }
             return updated;
           }); 
