@@ -19,7 +19,6 @@ const getOptId = (opt: any, i: number) => {
   return i;
 };
 
-// 🔧 Універсальний резолвер ID для відповідності (лікує баг з залипанням на "А")
 const getItemId = (item: any, index: number) => {
   if (item == null) return String(index);
   if (typeof item === 'string') return item;
@@ -29,7 +28,6 @@ const getItemId = (item: any, index: number) => {
   return String(index);
 };
 
-// 🧮 Функція підрахунку балів
 function computeResult(questions: any[], answers: Record<number, any>) {
   let total = 0;
   let max = 0;
@@ -74,7 +72,10 @@ function computeResult(questions: any[], answers: Record<number, any>) {
 
         if (pointsMode === 'partial' && correctOrder.length > 0) {
           let correctPos = 0;
-          correctOrder.forEach((cid, i) => { if (userOrder[i] === cid) correctPos++; });
+          // 🔥 ВИПРАВЛЕНО: Додано типи string та number
+          correctOrder.forEach((cid: string, i: number) => { 
+            if (userOrder[i] === cid) correctPos++; 
+          });
           earnedPoints = Math.round((correctPos / correctOrder.length) * points * 100) / 100;
         } else if (JSON.stringify(userOrder) === JSON.stringify(correctOrder)) {
           earnedPoints = points;
@@ -119,7 +120,6 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
   const [answers, setAnswers] = useState<Record<number, any>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(durationMinutes ? durationMinutes * 60 : null);
   
-  // Стан для збільшення картинок
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   const answersRef = useRef(answers);
@@ -136,13 +136,11 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
 
   const currentQ = questions && questions.length > 0 ? questions[currentIndex] : null;
 
-  // 🔄 Перемішування послідовності при першому відкритті питання
   useEffect(() => {
     if (!currentQ) return;
     const isSeq = currentQ.type === 'sequence' || currentQ.type === 'chronology' || (currentQ.items && !currentQ.leftColumn && !currentQ.options);
     if (isSeq && answers[currentIndex] === undefined) {
       const initialSeq = (currentQ.sequenceItems || currentQ.items || []).map((x: any) => typeof x === 'string' ? { id: x, text: x } : x);
-      // Перемішуємо масив
       const shuffled = [...initialSeq].sort(() => Math.random() - 0.5);
       setAnswers(prev => ({ ...prev, [currentIndex]: shuffled }));
     }
@@ -205,12 +203,10 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Перевірка, чи має хоча б один варіант картинку (для сітки 2х2)
   const hasImageOptions = currentQ.options?.some((o: any) => o.image);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Верхня панель */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
         <div>
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Питання</p>
@@ -224,7 +220,6 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
         <button onClick={handleFinish} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl transition shadow-sm cursor-pointer">Завершити</button>
       </div>
 
-      {/* Блок питання */}
       <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
         <div>
           <h2 className="text-xl font-bold text-slate-900 leading-relaxed mb-3">{currentQ.text || currentQ.prompt || currentQ.title || 'Питання без тексту'}</h2>
@@ -238,7 +233,6 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
           )}
         </div>
 
-        {/* 1. ХРОНОЛОГІЯ */}
         {isSequence ? (
           <div className="space-y-3">
             <p className="text-sm text-slate-500 mb-4">Розставте події у хронологічній послідовності.</p>
@@ -259,12 +253,11 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
             </div>
           </div>
         ) : isMatching ? (
-          /* 2. ВІДПОВІДНІСТЬ */
           <div className="space-y-3">
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <div className="grid grid-cols-[1fr_1fr] bg-slate-50 border-b border-slate-200 p-3 text-xs font-bold text-slate-600 uppercase"><div>Термін</div><div>Відповідність</div></div>
               {leftItems.map((left: any, i: number) => {
-                const leftId = getItemId(left, i); // 🔧 Фікс залипання
+                const leftId = getItemId(left, i);
                 const selectedRightId = answers[currentIndex]?.[leftId] || '';
                 return (
                   <div key={leftId} className="grid grid-cols-[1fr_1fr] border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition">
@@ -279,7 +272,7 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
                       <select value={selectedRightId} onChange={e => handleMatchChange(leftId, e.target.value)} className={`w-full p-2.5 rounded-lg border text-sm outline-none ${selectedRightId ? 'border-teal-300 bg-teal-50 text-teal-900 font-medium' : 'border-slate-300 bg-white text-slate-700'}`}>
                         <option value="">— Оберіть варіант —</option>
                         {rightItems.map((right: any, j: number) => {
-                          const rightId = getItemId(right, j); // 🔧 Фікс залипання
+                          const rightId = getItemId(right, j);
                           return <option key={rightId} value={rightId}>{getLetter(j)}. {getText(right)}</option>;
                         })}
                       </select>
@@ -290,11 +283,9 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
             </div>
           </div>
         ) : (
-          /* 3. ЗВИЧАЙНІ ТА МНОЖИННІ ТЕСТИ */
           <div>
             {currentQ.options ? (
               hasImageOptions ? (
-                /* 🔥 Сітка 2х2 для картинок (Пункт 10) */
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {currentQ.options.map((opt: any, i: number) => {
                     const optId = getOptId(opt, i);
@@ -319,7 +310,6 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
                   })}
                 </div>
               ) : (
-                /* Звичайний список без картинок */
                 <div className="space-y-3">
                   {currentQ.options.map((opt: any, i: number) => {
                     const optId = getOptId(opt, i);
@@ -343,7 +333,6 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
         )}
       </div>
 
-      {/* Навігація */}
       <div className="flex items-center justify-between">
         <button onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))} disabled={currentIndex === 0} className="px-6 py-3 bg-white border border-slate-200 font-bold rounded-xl disabled:opacity-50 flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer">
           <ChevronLeft className="w-4 h-4" /> Назад
@@ -359,7 +348,6 @@ export default function TestPlayer({ questions, sessionCode, durationMinutes, st
         )}
       </div>
 
-      {/* 🔥 Модальне вікно для перегляду зображень */}
       {zoomedImage && (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}>
           <button className="absolute top-4 right-4 text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition" onClick={(e) => { e.stopPropagation(); setZoomedImage(null); }}>

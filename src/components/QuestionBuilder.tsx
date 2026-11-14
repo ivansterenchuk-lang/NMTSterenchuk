@@ -43,9 +43,9 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
     (initial as any)?.gradingSystem ?? '12'
   );
 
-  // 🔥 НОВЕ: Гнучка система балів
-  const [points, setPoints] = useState<number>(initial?.points ?? 1);
-  const [pointsMode, setPointsMode] = useState<'all' | 'partial'>(initial?.pointsMode ?? 'all');
+  // 🔥 ВИПРАВЛЕНО: Додано as any для усунення помилки TypeScript
+  const [points, setPoints] = useState<number>((initial as any)?.points ?? 1);
+  const [pointsMode, setPointsMode] = useState<'all' | 'partial'>((initial as any)?.pointsMode ?? 'all');
 
   // Стан для модального вікна зображень
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
