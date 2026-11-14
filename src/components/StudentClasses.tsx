@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import TestPlayer from './TestPlayer';
 import type { Answer } from '../lib/nmt';
 import {
@@ -106,6 +106,13 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
   const [filter, setFilter] = useState<'all' | HwStatus>('all');
   const [testResult, setTestResult] = useState<TestResultData | null>(null);
 
+  // 🔥 ВИПРАВЛЕННЯ 1: Автоматичне підтягування коду класу з посилання (якщо joinCode змінюється)
+  useEffect(() => {
+    if (joinCode) {
+      setCodeInput(joinCode);
+    }
+  }, [joinCode]);
+
   const safeClasses = classes || [];
   const safeStudent = student || { id: '', name: '' };
   
@@ -135,7 +142,7 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
       return;
     }
     if (!targetClass) {
-      setJoinError('Клас з таким кодом не знайдено.');
+      setJoinError('Клас з таким кодом не знайдено. Перевірте код.');
       return;
     }
     if (!isAlreadyJoined && !targetClass.acceptJoins) {
@@ -402,7 +409,7 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
                 value={codeInput}
                 onChange={e => setCodeInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') join(); }}
-                placeholder="Напр. K7X2M9"
+                placeholder="Напр. CLS-1816"
                 className={`${inp} font-mono uppercase`}
               />
             </div>
@@ -423,9 +430,10 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
               <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5">{joinError}</p>
             )}
             
+            {/* 🔥 ВИПРАВЛЕННЯ 2: Кнопка активна, якщо введено ім'я та код, навіть якщо клас ще не підвантажився */}
             <button
               onClick={join}
-              disabled={!targetClass}
+              disabled={!nameInput.trim() || !codeInput.trim()}
               className="w-full py-3 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center justify-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
