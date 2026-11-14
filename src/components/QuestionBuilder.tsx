@@ -16,6 +16,18 @@ type Props = {
 const inp = 'w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition';
 const ghostBtn = 'px-4 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-teal-700 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm';
 
+// 🔧 Генератор українських літер (А, Б, В, Г...)
+const getLetter = (index: number) => String.fromCharCode(1040 + index);
+
+// 🔧 Отримання індексу з літери (підтримує і англійські, і українські для сумісності)
+const getIndexFromLetter = (letter: string) => {
+  if (!letter) return -1;
+  const code = letter.charCodeAt(0);
+  if (code >= 1040 && code <= 1071) return code - 1040; // Українські А-Я
+  if (code >= 65 && code <= 90) return code - 65; // Англійські A-Z (для старих тестів)
+  return -1;
+};
+
 export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
   const editing = initial !== null && initial !== undefined;
 
@@ -26,10 +38,19 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
   const [comment, setComment] = useState(initial?.comment ?? '');
   const [error, setError] = useState('');
 
-  // НОВЕ: Система оцінювання для конкретного питання
+  // Система оцінювання
   const [gradingSystem, setGradingSystem] = useState<'12' | '100' | 'preschool' | 'nus'>(
     (initial as any)?.gradingSystem ?? '12'
   );
+
+  // 🔥 НОВЕ: Гнучка система балів
+  const [points, setPoints] = useState<number>(initial?.points ?? 1);
+  const [pointsMode, setPointsMode] = useState<'all' | 'partial'>(initial?.pointsMode ?? 'all');
+
+  // Стан для модального вікна зображень
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [imageCallback, setImageCallback] = useState<((url: string) => void) | null>(null);
+  const [tempImageUrl, setTempImageUrl] = useState('');
 
   // 1. Одна або кілька відповідей
   const [options, setOptions] = useState<{ text: string; isCorrect: boolean; image?: string }[]>(
@@ -48,19 +69,28 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
   const [rightCol, setRightCol] = useState<{ text: string; image?: string }[]>(
     initial?.rightColumn?.map((x: any) => typeof x === 'string' ? { text: x } : x) ?? [{ text: '' }, { text: '' }, { text: '' }, { text: '' }, { text: '' }]
   );
-  const [matches, setMatches] = useState<Record<number, string>>(initial?.correctMatches ?? { 0: 'A', 1: 'B', 2: 'C', 3: 'D' });
+  // За замовчуванням українські літери
+  const [matches, setMatches] = useState<Record<number, string>>(
+    initial?.correctMatches ?? { 0: 'А', 1: 'Б', 2: 'В', 3: 'Г' }
+  );
 
   // 3. Послідовність
   const [sequence, setSequence] = useState<{ text: string; image?: string }[]>(
     initial?.sequenceItems?.map((x: any) => typeof x === 'string' ? { text: x } : x) ?? [{ text: '' }, { text: '' }, { text: '' }, { text: '' }]
   );
 
-  // --- ФУНКЦІЯ ДОДАВАННЯ КАРТИНКИ ЗА ПОСИЛАННЯМ ---
-  const promptForImage = (callback: (url: string) => void) => {
-    const url = window.prompt('Вставте URL-адресу зображення (має починатися з http або https):');
-    if (url && url.trim() && (url.trim().startsWith('http://') || url.trim().startsWith('https://'))) {
-      callback(url.trim());
-    } else if (url && url.trim()) {
+  // --- СУЧАСНЕ ВІКНО ДЛЯ ДОДАВАННЯ КАРТИНКИ ---
+  const openImageModal = (callback: (url: string) => void) => {
+    setImageCallback(() => callback);
+    setTempImageUrl('');
+    setIsImageModalOpen(true);
+  };
+
+  const confirmImage = () => {
+    if (tempImageUrl.trim() && (tempImageUrl.trim().startsWith('http://') || tempImageUrl.trim().startsWith('https://'))) {
+      if (imageCallback) imageCallback(tempImageUrl.trim());
+      setIsImageModalOpen(false);
+    } else {
       alert('Неправильний формат посилання. Воно має починатися з http:// або https://');
     }
   };
@@ -100,7 +130,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
     const newCol = [...rightCol]; newCol[i].image = img; setRightCol(newCol);
   };
 
-  // ВИПРАВЛЕНО: Безпечне видалення лівої колонки з оновленням індексів
   const removeLeftItem = (i: number) => {
     if (leftCol.length <= 2) return;
     const newLeft = leftCol.filter((_, k) => k !== i);
@@ -117,7 +146,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
     setMatches(newMatches);
   };
 
-  // ВИПРАВЛЕНО: Безпечне видалення правої колонки зі зміщенням літер
   const removeRightItem = (i: number) => {
     if (rightCol.length <= 2) return;
     const newRight = rightCol.filter((_, k) => k !== i);
@@ -127,12 +155,12 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
     Object.keys(newMatches).forEach((k) => {
       const leftIdx = Number(k);
       const letter = newMatches[leftIdx];
-      const targetIdx = letter.charCodeAt(0) - 65; // 'A' = 0
+      const targetIdx = getIndexFromLetter(letter);
       
       if (targetIdx === i) {
         delete newMatches[leftIdx]; // Видаляємо відповідність, якщо елемент зник
       } else if (targetIdx > i) {
-        newMatches[leftIdx] = String.fromCharCode(65 + targetIdx - 1); // Зсуваємо літеру (напр., 'C' стає 'B')
+        newMatches[leftIdx] = getLetter(targetIdx - 1); // Зсуваємо літеру (напр., 'В' стає 'Б')
       }
     });
     setMatches(newMatches);
@@ -163,7 +191,9 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
       type,
       image: image || undefined,
       comment: comment.trim() || undefined,
-      gradingSystem, // ДОДАНО: Система оцінювання
+      gradingSystem,
+      points,         // 🔥 Зберігаємо бали
+      pointsMode,     // 🔥 Зберігаємо режим нарахування
     };
 
     if (type === 'single' || type === 'multiple') {
@@ -173,7 +203,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
       q.options = validOptions;
     } 
     else if (type === 'matching') {
-      // ВИПРАВЛЕНО: Захист від білого екрану (перевірка, чи не вказують на порожні елементи)
       const newLeft = leftCol.filter((c) => c.text.trim() !== '' || c.image);
       const newRight = rightCol.filter((c) => c.text.trim() !== '' || c.image);
 
@@ -182,7 +211,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
         return; 
       }
 
-      // Перевіряємо, чи всі елементи мають відповідники
       for (let i = 0; i < leftCol.length; i++) {
         const isLeftValid = leftCol[i].text.trim() !== '' || leftCol[i].image;
         if (isLeftValid) {
@@ -191,7 +219,7 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
             setError('Вкажіть відповідність для кожного елемента лівої колонки.');
             return;
           }
-          const rIdx = matchLetter.charCodeAt(0) - 65;
+          const rIdx = getIndexFromLetter(matchLetter);
           const rightItem = rightCol[rIdx];
           if (!rightItem || (rightItem.text.trim() === '' && !rightItem.image)) {
             setError(`Відповідник «${matchLetter}» порожній. Заповніть його або оберіть інший.`);
@@ -200,7 +228,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
         }
       }
 
-      // Якщо все добре, перераховуємо індекси для безпечного збереження
       const finalMatches: Record<number, string> = {};
       let validLeftIndex = 0;
       for (let i = 0; i < leftCol.length; i++) {
@@ -234,7 +261,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
               {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
 
-            {/* НОВЕ: Вибір системи оцінювання */}
             <select value={gradingSystem} onChange={e => setGradingSystem(e.target.value as any)} className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-teal-600 shadow-sm cursor-pointer">
               <option value="12">12-бальна</option>
               <option value="100">100-бальна</option>
@@ -266,22 +292,48 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
             <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">Текст питання</label>
             <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="Введіть текст завдання..." className={`${inp} resize-none`} />
             
-            <div className="flex items-center gap-4 pt-2">
+            <div className="flex flex-wrap items-center gap-4 pt-2">
               <button 
                 type="button"
-                onClick={() => promptForImage(setImage)}
+                onClick={() => openImageModal(setImage)}
                 className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg cursor-pointer hover:bg-slate-100 transition text-sm text-slate-700 font-bold shadow-sm"
               >
                 <ImageIcon className="w-4 h-4 text-teal-600" />
                 Додати фото до питання
               </button>
               
+              {/* 🔥 Пункт 3: Збільшене прев'ю картинки */}
               {image && (
                 <div className="relative">
-                  <img src={image} alt="Preview" className="h-16 w-16 object-cover rounded-lg border border-slate-300 shadow-sm" />
+                  <img src={image} alt="Preview" className="h-24 w-auto max-w-[200px] object-contain rounded-lg border border-slate-300 shadow-sm bg-slate-100 p-1" />
                   <button onClick={() => setImage(undefined)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 cursor-pointer"><X className="w-3 h-3" /></button>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* 🔥 Пункт 6: Налаштування балів */}
+          <div className="flex flex-wrap items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-700">Кількість балів за питання:</label>
+              <input
+                type="number"
+                min="1"
+                value={points}
+                onChange={e => setPoints(Math.max(1, Number(e.target.value)))}
+                className="w-16 p-1.5 border border-slate-300 rounded-lg text-sm font-bold text-center outline-none focus:border-teal-500"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-700">Режим нарахування:</label>
+              <select
+                value={pointsMode}
+                onChange={e => setPointsMode(e.target.value as any)}
+                className="p-1.5 border border-slate-300 rounded-lg text-sm font-bold outline-none focus:border-teal-500 cursor-pointer"
+              >
+                <option value="all">Усе або нічого</option>
+                <option value="partial">Часткові (за кожну правильну)</option>
+              </select>
             </div>
           </div>
 
@@ -302,20 +354,19 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                 <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <div className="flex items-center gap-3 flex-1">
                     <input type={type === 'single' ? 'radio' : 'checkbox'} checked={opt.isCorrect} onChange={() => toggleCorrect(i)} className={`w-5 h-5 cursor-pointer accent-teal-600 ${type === 'single' ? 'rounded-full' : 'rounded'}`} />
-                    <span className="text-sm font-black text-slate-500 w-5 text-center">{String.fromCharCode(65 + i)}</span>
-                    <input value={opt.text} onChange={e => updateOption(i, e.target.value)} className="flex-1 bg-white p-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-teal-600 focus:ring-1 focus:ring-teal-600 outline-none transition" placeholder={`Варіант ${String.fromCharCode(65 + i)}`} />
+                    <span className="text-sm font-black text-slate-500 w-5 text-center">{getLetter(i)}</span>
+                    <input value={opt.text} onChange={e => updateOption(i, e.target.value)} className="flex-1 bg-white p-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-teal-600 focus:ring-1 focus:ring-teal-600 outline-none transition" placeholder={`Варіант ${getLetter(i)}`} />
                   </div>
                   
-                  {/* Фото до варіанту */}
                   <div className="flex items-center gap-2 shrink-0">
                     {opt.image ? (
                       <div className="relative">
-                        <img src={opt.image} alt="Opt" className="h-10 w-10 object-cover rounded border border-slate-300" />
+                        <img src={opt.image} alt="Opt" className="h-16 w-16 object-contain rounded border border-slate-300 bg-slate-100 p-1" />
                         <button onClick={() => updateOptionImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-sm hover:bg-red-600 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                       </div>
                     ) : (
                       <button 
-                        onClick={() => promptForImage((url) => updateOptionImage(i, url))} 
+                        onClick={() => openImageModal((url) => updateOptionImage(i, url))} 
                         className="p-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-teal-600 transition shadow-sm cursor-pointer"
                         title="Додати фото за посиланням"
                       >
@@ -347,18 +398,18 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                         <input value={item.text} onChange={e => updateLeft(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Термін ${i + 1}`} />
                         <select value={matches[i] || ''} onChange={e => setMatches({ ...matches, [i]: e.target.value })} className="p-2 bg-teal-50 border border-teal-300 rounded-lg text-teal-900 text-xs font-bold outline-none cursor-pointer">
                           <option value="">—</option>
-                          {rightCol.map((_, c) => <option key={c} value={String.fromCharCode(65 + c)}>{String.fromCharCode(65 + c)}</option>)}
+                          {rightCol.map((_, c) => <option key={c} value={getLetter(c)}>{getLetter(c)}</option>)}
                         </select>
                         <button onClick={() => removeLeftItem(i)} disabled={leftCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                       <div className="flex items-center gap-2 pl-6">
                         {item.image ? (
                           <div className="relative">
-                            <img src={item.image} className="h-10 w-10 object-cover rounded border border-slate-300" />
+                            <img src={item.image} className="h-16 w-16 object-contain rounded border border-slate-300 bg-slate-100 p-1" />
                             <button onClick={() => updateLeftImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                           </div>
                         ) : (
-                          <button onClick={() => promptForImage((url) => updateLeftImage(i, url))} className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1 font-bold">
+                          <button onClick={() => openImageModal((url) => updateLeftImage(i, url))} className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1 font-bold">
                             <ImageIcon className="w-3.5 h-3.5" /> Додати фото
                           </button>
                         )}
@@ -374,18 +425,18 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                   {rightCol.map((item, i) => (
                     <div key={i} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-slate-500 w-4">{String.fromCharCode(65 + i)}</span>
-                        <input value={item.text} onChange={e => updateRight(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Варіант ${String.fromCharCode(65 + i)}`} />
+                        <span className="text-sm font-black text-slate-500 w-4">{getLetter(i)}</span>
+                        <input value={item.text} onChange={e => updateRight(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Варіант ${getLetter(i)}`} />
                         <button onClick={() => removeRightItem(i)} disabled={rightCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                       <div className="flex items-center gap-2 pl-6">
                         {item.image ? (
                           <div className="relative">
-                            <img src={item.image} className="h-10 w-10 object-cover rounded border border-slate-300" />
+                            <img src={item.image} className="h-16 w-16 object-contain rounded border border-slate-300 bg-slate-100 p-1" />
                             <button onClick={() => updateRightImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                           </div>
                         ) : (
-                          <button onClick={() => promptForImage((url) => updateRightImage(i, url))} className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1 font-bold">
+                          <button onClick={() => openImageModal((url) => updateRightImage(i, url))} className="text-[11px] text-teal-600 hover:underline cursor-pointer flex items-center gap-1 font-bold">
                             <ImageIcon className="w-3.5 h-3.5" /> Додати фото
                           </button>
                         )}
@@ -412,11 +463,11 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                   <div className="flex items-center gap-2 shrink-0">
                     {item.image ? (
                       <div className="relative">
-                        <img src={item.image} className="h-10 w-10 object-cover rounded border border-slate-300" />
+                        <img src={item.image} className="h-16 w-16 object-contain rounded border border-slate-300 bg-slate-100 p-1" />
                         <button onClick={() => updateSeqImage(i, undefined)} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 cursor-pointer"><X className="w-2.5 h-2.5" /></button>
                       </div>
                     ) : (
-                      <button onClick={() => promptForImage((url) => updateSeqImage(i, url))} className="p-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-teal-600 transition shadow-sm cursor-pointer" title="Додати фото за посиланням">
+                      <button onClick={() => openImageModal((url) => updateSeqImage(i, url))} className="p-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-teal-600 transition shadow-sm cursor-pointer" title="Додати фото за посиланням">
                         <ImageIcon className="w-5 h-5" />
                       </button>
                     )}
@@ -435,6 +486,40 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
           {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm font-bold rounded-xl p-3">{error}</div>}
         </div>
       </div>
+
+      {/* 🔥 Пункт 8: Сучасне модальне вікно для додавання URL картинки */}
+      {isImageModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-slate-900">Додати зображення за посиланням</h3>
+              <button onClick={() => setIsImageModalOpen(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <input
+                type="text"
+                value={tempImageUrl}
+                onChange={(e) => setTempImageUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:border-teal-500 outline-none transition"
+                autoFocus
+              />
+              
+              {/* Попередній перегляд картинки */}
+              {tempImageUrl && (tempImageUrl.startsWith('http://') || tempImageUrl.startsWith('https://')) && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex justify-center">
+                  <img src={tempImageUrl} alt="Preview" className="max-h-48 w-auto object-contain rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={() => setIsImageModalOpen(false)} className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition cursor-pointer">Скасувати</button>
+                <button onClick={confirmImage} className="px-4 py-2 bg-teal-600 text-white font-bold hover:bg-teal-700 rounded-xl shadow-md transition cursor-pointer">Додати</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
