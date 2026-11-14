@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import QuestionBuilder from './QuestionBuilder';
 import QuestionCard from './QuestionCard';
 import AssignModal from './AssignModal';
+import ShareModal from './ShareModal'; // 🔥 Імпорт модалки
 import { copyText } from './ClassroomShared';
 import { maxPoints, type Question } from '../lib/nmt';
 import type { ClassItem, NewAssignment } from '../lib/classroom';
 import type { PublicTest } from '../lib/search';
+import { CheckCircle2, ListChecks, Link2, ListOrdered, FileText } from 'lucide-react';
 
 type SessionLite = {
   id: string;
@@ -29,9 +31,25 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
   const [openQ, setOpenQ] = useState<number | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false); // 🔥 Стан для модалки
 
   const points = qs.reduce((s, q) => s + maxPoints(q), 0);
   const active = session.status === 'Активна';
+
+  // 🔥 Розрахунок статистики
+  const stats = useMemo(() => {
+    const res = { single: 0, multiple: 0, matching: 0, sequence: 0, notebook: 0, total: 0 };
+    qs.forEach(q => {
+      res.total++;
+      const type = (q as any).type;
+      if (type === 'matching' || (q as any).leftItems?.length > 0 || (q as any).leftColumn) res.matching++;
+      else if (type === 'sequence') res.sequence++;
+      else if (type === 'multiple') res.multiple++;
+      else if (type === 'notebook' || (q as any).isNotebook) res.notebook++;
+      else res.single++;
+    });
+    return res;
+  }, [qs]);
 
   const asTest: PublicTest = {
     id: session.id,
@@ -58,9 +76,48 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
     setAssigning(true);
   };
 
+  // 🔥 Генерація прямого посилання на тест
+  const directLink = `${window.location.origin}/?join=${session.id}`;
+
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50">
-      <div className="max-w-4xl mx-auto p-6 lg:p-10 space-y-6">
+      
+      {/* 🔥 Плаваюче вікно статистики */}
+      <div className="hidden xl:block fixed right-8 top-24 w-64 bg-white rounded-2xl border border-slate-200 shadow-xl p-5 z-50">
+        <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3 text-sm flex items-center gap-2">
+          📊 Статистика сесії
+        </h3>
+        <div className="space-y-3 text-xs">
+          <div className="flex justify-between items-center text-slate-600">
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/> Одна відп.</span>
+            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{stats.single}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-600">
+            <span className="flex items-center gap-1.5"><ListChecks className="w-4 h-4 text-blue-500"/> Множинний</span>
+            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{stats.multiple}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-600">
+            <span className="flex items-center gap-1.5"><Link2 className="w-4 h-4 text-purple-500"/> Відповідність</span>
+            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{stats.matching}</span>
+          </div>
+          <div className="flex justify-between items-center text-slate-600">
+            <span className="flex items-center gap-1.5"><ListOrdered className="w-4 h-4 text-amber-500"/> Послідовність</span>
+            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{stats.sequence}</span>
+          </div>
+          {stats.notebook > 0 && (
+            <div className="flex justify-between items-center text-slate-600">
+              <span className="flex items-center gap-1.5"><FileText className="w-4 h-4 text-slate-500"/> Зошит</span>
+              <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{stats.notebook}</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-slate-900 text-sm">
+          <span>Всього:</span>
+          <span className="text-teal-600 text-lg">{stats.total}</span>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto p-6 lg:p-10 space-y-6 relative z-10">
         <button onClick={onClose} className="text-teal-600 hover:underline text-xs font-bold inline-flex items-center gap-1">
           <span>← Повернутися до сесій</span>
         </button>
@@ -84,19 +141,28 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
           <h2 className="text-2xl font-black text-slate-900">{session.title}</h2>
         </div>
 
-        {/* Блок з кодом */}
+        {/* Блок з кодом та посиланням */}
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 space-y-4 shadow-sm">
-          <p className="text-[11px] font-black uppercase tracking-widest text-amber-600">📡 Код для учнів</p>
+          <p className="text-[11px] font-black uppercase tracking-widest text-amber-600">📡 Код та посилання для учнів</p>
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-mono text-4xl font-black text-slate-900 tracking-[0.15em]">{session.id}</span>
+            
             <button
               onClick={copy}
               className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"
             >
               {copied ? '✓ Скопійовано' : '📋 Копіювати код'}
             </button>
+
+            {/* 🔥 Кнопка "Поділитися" */}
+            <button
+              onClick={() => setIsShareModalOpen(true)}
+              className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm flex items-center gap-1.5"
+            >
+              🔗 Поділитися
+            </button>
           </div>
-          <p className="text-xs text-slate-600 font-medium">Учень вводить цей код у розділі «Тест за кодом».</p>
+          <p className="text-xs text-slate-600 font-medium">Учень може ввести цей код у розділі «Тест за кодом» або перейти за прямим посиланням.</p>
           
           <div className="flex flex-wrap gap-2 pt-2">
             <button
@@ -169,6 +235,14 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
           }}
         />
       )}
+
+      {/* 🔥 Модальне вікно "Поділитися" */}
+      <ShareModal 
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        url={directLink}
+        title={session.title}
+      />
     </div>
   );
 }
