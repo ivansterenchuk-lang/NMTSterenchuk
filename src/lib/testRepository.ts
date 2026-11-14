@@ -73,6 +73,15 @@ export async function updateTest(id: string, input: TestInput): Promise<void> {
   if (error) throw error;
 }
 
+// 🔥 НОВА ФУНКЦІЯ: Оновлення лише назви тесту
+export async function updateTestTitle(id: string, title: string): Promise<void> {
+  const { error } = await supabase
+    .from('tests')
+    .update({ title })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function deleteTest(id: string): Promise<void> {
   const { error } = await supabase.from('tests').delete().eq('id', id);
   if (error) throw error;
