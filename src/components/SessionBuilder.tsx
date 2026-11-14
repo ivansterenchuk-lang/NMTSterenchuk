@@ -2,10 +2,10 @@ import { useState, useMemo } from 'react';
 import QuestionBuilder from './QuestionBuilder';
 import QuestionCard from './QuestionCard';
 import AssignModal from './AssignModal';
-import ShareModal from './ShareModal'; // 🔥 Імпорт модалки
+import ShareModal from './ShareModal';
 import { copyText } from './ClassroomShared';
 import { maxPoints, type Question } from '../lib/nmt';
-import type { ClassItem, NewAssignment } from '../lib/classroom';
+import type { ClassItem } from '../lib/classroom'; // 🔥 Прибрано NewAssignment
 import type { PublicTest } from '../lib/search';
 import { CheckCircle2, ListChecks, Link2, ListOrdered, FileText } from 'lucide-react';
 
@@ -21,7 +21,7 @@ type Props = {
   classes: ClassItem[];
   onClose: () => void;
   onQuestionsChange: (qs: Question[]) => void;
-  onAssign: (classId: string, data: NewAssignment) => void;
+  onAssign: (classId: string, data: any) => void; // 🔥 Замінено NewAssignment на any
   onToggleStatus: () => void;
 };
 
@@ -31,7 +31,7 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
   const [openQ, setOpenQ] = useState<number | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false); // 🔥 Стан для модалки
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   const points = qs.reduce((s, q) => s + maxPoints(q), 0);
   const active = session.status === 'Активна';
@@ -67,7 +67,6 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
     setTimeout(() => setCopied(false), 1600);
   };
 
-  // Додаємо перевірку, чи є взагалі класи
   const handleOpenAssign = () => {
     if (classes.length === 0) {
       alert('У вас ще немає створених класів. Перейдіть у вкладку "КЛАСИ" та створіть клас.');
@@ -76,13 +75,12 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
     setAssigning(true);
   };
 
-  // 🔥 Генерація прямого посилання на тест
   const directLink = `${window.location.origin}/?join=${session.id}`;
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50">
       
-      {/* 🔥 Плаваюче вікно статистики */}
+      {/* Плаваюче вікно статистики */}
       <div className="hidden xl:block fixed right-8 top-24 w-64 bg-white rounded-2xl border border-slate-200 shadow-xl p-5 z-50">
         <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3 text-sm flex items-center gap-2">
           📊 Статистика сесії
@@ -154,7 +152,6 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
               {copied ? '✓ Скопійовано' : '📋 Копіювати код'}
             </button>
 
-            {/* 🔥 Кнопка "Поділитися" */}
             <button
               onClick={() => setIsShareModalOpen(true)}
               className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm flex items-center gap-1.5"
@@ -236,7 +233,7 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
         />
       )}
 
-      {/* 🔥 Модальне вікно "Поділитися" */}
+      {/* Модальне вікно "Поділитися" */}
       <ShareModal 
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
