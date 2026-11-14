@@ -43,7 +43,7 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
     (initial as any)?.gradingSystem ?? '12'
   );
 
-  // 🔥 ВИПРАВЛЕНО: Додано as any для усунення помилки TypeScript
+  // 🔥 Гнучка система балів
   const [points, setPoints] = useState<number>((initial as any)?.points ?? 1);
   const [pointsMode, setPointsMode] = useState<'all' | 'partial'>((initial as any)?.pointsMode ?? 'all');
 
@@ -192,8 +192,8 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
       image: image || undefined,
       comment: comment.trim() || undefined,
       gradingSystem,
-      points,         // 🔥 Зберігаємо бали
-      pointsMode,     // 🔥 Зберігаємо режим нарахування
+      points,
+      pointsMode,
     };
 
     if (type === 'single' || type === 'multiple') {
@@ -302,7 +302,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                 Додати фото до питання
               </button>
               
-              {/* 🔥 Пункт 3: Збільшене прев'ю картинки */}
               {image && (
                 <div className="relative">
                   <img src={image} alt="Preview" className="h-24 w-auto max-w-[200px] object-contain rounded-lg border border-slate-300 shadow-sm bg-slate-100 p-1" />
@@ -351,14 +350,21 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                 Варіанти відповіді (оберіть {type === 'single' ? 'один' : 'кілька'} правильних)
               </span>
               {options.map((opt, i) => (
-                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-3 flex-1">
-                    <input type={type === 'single' ? 'radio' : 'checkbox'} checked={opt.isCorrect} onChange={() => toggleCorrect(i)} className={`w-5 h-5 cursor-pointer accent-teal-600 ${type === 'single' ? 'rounded-full' : 'rounded'}`} />
-                    <span className="text-sm font-black text-slate-500 w-5 text-center">{getLetter(i)}</span>
-                    <input value={opt.text} onChange={e => updateOption(i, e.target.value)} className="flex-1 bg-white p-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-teal-600 focus:ring-1 focus:ring-teal-600 outline-none transition" placeholder={`Варіант ${getLetter(i)}`} />
+                <div key={i} className="flex flex-col sm:flex-row sm:items-start gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div className="flex items-start gap-3 flex-1">
+                    <input type={type === 'single' ? 'radio' : 'checkbox'} checked={opt.isCorrect} onChange={() => toggleCorrect(i)} className={`mt-3 w-5 h-5 cursor-pointer accent-teal-600 ${type === 'single' ? 'rounded-full' : 'rounded'}`} />
+                    <span className="mt-2 text-sm font-black text-slate-500 w-5 text-center">{getLetter(i)}</span>
+                    {/* 🔥 ЗАМІНА INPUT НА TEXTAREA ДЛЯ ДОВГИХ ТЕКСТІВ */}
+                    <textarea 
+                      value={opt.text} 
+                      onChange={e => updateOption(i, e.target.value)} 
+                      rows={1}
+                      className="flex-1 bg-white p-2.5 border border-slate-300 rounded-lg text-sm text-slate-900 focus:border-teal-600 focus:ring-1 focus:ring-teal-600 outline-none transition resize-y min-h-[42px]" 
+                      placeholder={`Варіант ${getLetter(i)}`} 
+                    />
                   </div>
                   
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 sm:mt-1">
                     {opt.image ? (
                       <div className="relative">
                         <img src={opt.image} alt="Opt" className="h-16 w-16 object-contain rounded border border-slate-300 bg-slate-100 p-1" />
@@ -393,14 +399,21 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                   <span className="text-xs font-black text-teal-800 uppercase tracking-wider block mb-2 bg-teal-50 p-2 rounded-lg">Ліва колонка (Терміни)</span>
                   {leftCol.map((item, i) => (
                     <div key={i} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-slate-500 w-4">{i + 1}</span>
-                        <input value={item.text} onChange={e => updateLeft(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Термін ${i + 1}`} />
-                        <select value={matches[i] || ''} onChange={e => setMatches({ ...matches, [i]: e.target.value })} className="p-2 bg-teal-50 border border-teal-300 rounded-lg text-teal-900 text-xs font-bold outline-none cursor-pointer">
+                      <div className="flex items-start gap-2">
+                        <span className="mt-2.5 text-sm font-black text-slate-500 w-4">{i + 1}</span>
+                        {/* 🔥 ЗАМІНА INPUT НА TEXTAREA */}
+                        <textarea 
+                          value={item.text} 
+                          onChange={e => updateLeft(i, e.target.value)} 
+                          rows={1}
+                          className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition resize-y min-h-[38px]" 
+                          placeholder={`Термін ${i + 1}`} 
+                        />
+                        <select value={matches[i] || ''} onChange={e => setMatches({ ...matches, [i]: e.target.value })} className="mt-1 p-2 bg-teal-50 border border-teal-300 rounded-lg text-teal-900 text-xs font-bold outline-none cursor-pointer">
                           <option value="">—</option>
                           {rightCol.map((_, c) => <option key={c} value={getLetter(c)}>{getLetter(c)}</option>)}
                         </select>
-                        <button onClick={() => removeLeftItem(i)} disabled={leftCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => removeLeftItem(i)} disabled={leftCol.length <= 2} className="mt-1 p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                       <div className="flex items-center gap-2 pl-6">
                         {item.image ? (
@@ -424,10 +437,17 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                   <span className="text-xs font-black text-teal-800 uppercase tracking-wider block mb-2 bg-teal-50 p-2 rounded-lg">Права колонка (Відповідники)</span>
                   {rightCol.map((item, i) => (
                     <div key={i} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-slate-500 w-4">{getLetter(i)}</span>
-                        <input value={item.text} onChange={e => updateRight(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Варіант ${getLetter(i)}`} />
-                        <button onClick={() => removeRightItem(i)} disabled={rightCol.length <= 2} className="p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                      <div className="flex items-start gap-2">
+                        <span className="mt-2.5 text-sm font-black text-slate-500 w-4">{getLetter(i)}</span>
+                        {/* 🔥 ЗАМІНА INPUT НА TEXTAREA */}
+                        <textarea 
+                          value={item.text} 
+                          onChange={e => updateRight(i, e.target.value)} 
+                          rows={1}
+                          className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition resize-y min-h-[38px]" 
+                          placeholder={`Варіант ${getLetter(i)}`} 
+                        />
+                        <button onClick={() => removeRightItem(i)} disabled={rightCol.length <= 2} className="mt-1 p-1.5 text-slate-400 hover:text-red-600 transition disabled:opacity-30 bg-white rounded-lg border border-slate-300 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                       <div className="flex items-center gap-2 pl-6">
                         {item.image ? (
@@ -454,13 +474,20 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
             <div className="space-y-3">
               <span className="text-sm font-bold text-slate-900 block">Встановлення послідовності</span>
               {sequence.map((item, i) => (
-                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-3 flex-1">
-                    <span className="text-sm font-black text-teal-800 bg-teal-100 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border border-teal-200">{i + 1}</span>
-                    <input value={item.text} onChange={e => updateSeq(i, e.target.value)} className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition" placeholder={`Подія ${i + 1}`} />
+                <div key={i} className="flex flex-col sm:flex-row sm:items-start gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <div className="flex items-start gap-3 flex-1">
+                    <span className="mt-2 text-sm font-black text-teal-800 bg-teal-100 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border border-teal-200">{i + 1}</span>
+                    {/* 🔥 ЗАМІНА INPUT НА TEXTAREA */}
+                    <textarea 
+                      value={item.text} 
+                      onChange={e => updateSeq(i, e.target.value)} 
+                      rows={1}
+                      className="flex-1 bg-white p-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-600 transition resize-y min-h-[38px]" 
+                      placeholder={`Подія ${i + 1}`} 
+                    />
                   </div>
                   
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 sm:mt-1">
                     {item.image ? (
                       <div className="relative">
                         <img src={item.image} className="h-16 w-16 object-contain rounded border border-slate-300 bg-slate-100 p-1" />
@@ -505,7 +532,6 @@ export default function QuestionBuilder({ initial, onClose, onSave }: Props) {
                 autoFocus
               />
               
-              {/* Попередній перегляд картинки */}
               {tempImageUrl && (tempImageUrl.startsWith('http://') || tempImageUrl.startsWith('https://')) && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex justify-center">
                   <img src={tempImageUrl} alt="Preview" className="max-h-48 w-auto object-contain rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />
