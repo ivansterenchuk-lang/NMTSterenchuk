@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import './theme.css';
 import QuestionBuilder from './components/QuestionBuilder';
 import QuestionCard from './components/QuestionCard';
@@ -30,7 +30,7 @@ import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import CommunityTestViewModal from './components/CommunityTestViewModal';
 import LandingPage from './components/LandingPage';
-import { LogOut, Pencil, CheckCircle2, ListChecks, Link2, ListOrdered } from 'lucide-react';
+import { LogOut, Pencil, CheckCircle2, ListChecks, Link2, ListOrdered, FileText } from 'lucide-react';
 
 type LibraryItem = { id: number; title: string; type: 'group' | 'folder'; questions?: Question[]; isPublic?: boolean; };
 
@@ -71,7 +71,7 @@ const DEFAULT_LIBRARY: LibraryItem[] = [
   { id: 5, title: 'Історія України. Завдання за роками', type: 'group', questions: [] }
 ];
 
-// 🔧 Хелпер для іконок типів питань (ВИПРАВЛЕНО: title обгорнуто в span)
+// 🔧 Хелпер для іконок типів питань
 const getQuestionTypeIcons = (questions?: Question[]) => {
   if (!questions || questions.length === 0) return null;
   
@@ -82,7 +82,7 @@ const getQuestionTypeIcons = (questions?: Question[]) => {
     if (type === 'matching' || (q as any).leftItems?.length > 0 || (q as any).leftColumn) hasMatching = true;
     else if (type === 'sequence') hasSequence = true;
     else if (type === 'multiple') hasMultiple = true;
-    else hasSingle = true; // Дефолтний (одна відповідь або зошит)
+    else hasSingle = true;
   });
 
   return (
@@ -141,7 +141,7 @@ export default function App() {
           setUserInfo({ firstName: displayName, lastName: '', email });
         }
       }
-      setAuthReady(true); // Перевірка завершена
+      setAuthReady(true); 
     };
 
     supabase.auth.getSession().then(({ data }) => {
@@ -291,14 +291,12 @@ export default function App() {
     setLibraryLoaded(false);
     const fetchLib = async () => {
       try {
-        // 🔥 Додано ! після supabase
         const { data, error } = await supabase!.from('libraries').select('items').eq('teacher_id', currentUserId).maybeSingle();
         if (error) throw error;
         if (data && data.items) {
           setLibraryItems(data.items as LibraryItem[]);
         } else {
           setLibraryItems(DEFAULT_LIBRARY);
-          // 🔥 Додано ! після supabase
           await supabase!.from('libraries').insert({ teacher_id: currentUserId, items: DEFAULT_LIBRARY });
         }
       } catch (err) {
@@ -313,7 +311,6 @@ export default function App() {
   useEffect(() => {
     if (!authReady || !libraryLoaded || !currentUserId || !supabase) return;
     const timeout = setTimeout(async () => {
-      // 🔥 Додано ! після supabase
       const { error } = await supabase!.from('libraries').upsert({ 
         teacher_id: currentUserId, 
         items: libraryItems,
@@ -351,7 +348,6 @@ export default function App() {
     if (!authReady || !currentUserId || !supabase) return;
     const fetchSessions = async () => {
       try {
-        // 🔥 Додано ! після supabase
         const { data, error } = await supabase!.from('sessions').select('data').eq('teacher_id', currentUserId).order('created_at', { ascending: false });
         if (error) throw error;
         if (data) setActiveSessions(data.map((row: any) => row.data as SessionItem));
@@ -376,7 +372,6 @@ export default function App() {
     }
 
     let isMounted = true;
-    // 🔥 Додано ! після supabase
     supabase!.from('sessions').select('data').ilike('id', sessionCode.trim()).maybeSingle()
       .then(({ data }) => {
         if (isMounted && data && data.data) setFetchedSession(data.data as SessionItem);
@@ -422,7 +417,6 @@ export default function App() {
         return s;
       });
       const sess = updated.find(s => s.id === id);
-      // 🔥 Додано ! після supabase
       if (supabase && sess) supabase!.from('sessions').update({ data: sess }).eq('id', id).then();
       return updated;
     });
@@ -436,7 +430,6 @@ export default function App() {
       onConfirm: async () => { 
         setActiveSessions(prev => prev.filter(s => s.id !== id)); 
         if (selectedSessionForLive?.id === id) setSelectedSessionForLive(null); 
-        // 🔥 Додано ! після supabase
         if (supabase) await supabase!.from('sessions').delete().eq('id', id);
         notify('Сесію видалено'); 
       }
@@ -458,7 +451,6 @@ export default function App() {
     });
   };
 
-  // 🔥 ФУНКЦІЯ ЗБЕРЕЖЕННЯ ЗМІНЕНОЇ НАЗВИ
   const handleSaveLibTitle = (id: number) => {
     if (editingLibTitle.trim() !== '') {
       setLibraryItems(prev => prev.map(item => item.id === id ? { ...item, title: editingLibTitle.trim() } : item));
@@ -489,7 +481,6 @@ export default function App() {
     return <AdminConsole accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} library={libraryItems.map(i => ({ id: i.id, title: i.title, type: i.type, count: i.questions?.length ?? 0 }))} onDeleteLibrary={id => setLibraryItems(prev => prev.filter(i => i.id !== id))} onLogout={() => { setAdminSession(false); setAdminAuthed(false); exitAdmin(); }} onExit={exitAdmin} />;
   }
 
-  // ВИПРАВЛЕНО: Чекаємо, поки перевіриться сесія, щоб не викидало на екран входу
   if (!authReady) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 font-bold text-lg">Завантаження...</div>;
   }
@@ -500,18 +491,19 @@ export default function App() {
 
   const displayFirstName = userRole === 'student' ? (studentName ? splitName(studentName).firstName : 'Учень') : userInfo.firstName;
 
-  // 🔥 РОЗРАХУНОК ГЛОБАЛЬНОЇ СТАТИСТИКИ ДЛЯ БІБЛІОТЕКИ
-  const libStats = { single: 0, multiple: 0, matching: 0, sequence: 0, total: 0 };
-  libraryItems.forEach(item => {
-    item.questions?.forEach(q => {
-      libStats.total++;
+  // 🔥 РОЗРАХУНОК СТАТИСТИКИ ДЛЯ ПОТОЧНОГО ТЕСТУ (selectedFolder)
+  const folderStats = { single: 0, multiple: 0, matching: 0, sequence: 0, notebook: 0, total: 0 };
+  if (selectedFolder) {
+    selectedFolder.questions?.forEach(q => {
+      folderStats.total++;
       const type = (q as any).type;
-      if (type === 'matching' || (q as any).leftItems?.length > 0 || (q as any).leftColumn) libStats.matching++;
-      else if (type === 'sequence') libStats.sequence++;
-      else if (type === 'multiple') libStats.multiple++;
-      else libStats.single++;
+      if (type === 'matching' || (q as any).leftItems?.length > 0 || (q as any).leftColumn) folderStats.matching++;
+      else if (type === 'sequence') folderStats.sequence++;
+      else if (type === 'multiple') folderStats.multiple++;
+      else if (type === 'notebook' || (q as any).isNotebook) folderStats.notebook++;
+      else folderStats.single++;
     });
-  });
+  }
 
   return (
     <AccessProvider ent={ent} teacherName={teacherFullName}>
@@ -548,7 +540,43 @@ export default function App() {
           ) : (
             <div className="space-y-6">
               {selectedFolder ? (
-                <div className="space-y-6">
+                <div className="space-y-6 relative">
+                  
+                  {/* 🔥 Пункт 9: Плаваюча статистика для КОНКРЕТНОГО тесту (папки) */}
+                  <div className="hidden xl:block fixed right-8 top-28 w-64 bg-white rounded-2xl border border-slate-200 shadow-xl p-5 z-10">
+                    <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3 text-sm flex items-center gap-2">
+                      📊 Статистика тесту
+                    </h3>
+                    <div className="space-y-3 text-xs">
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/> Одна відп.</span>
+                        <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{folderStats.single}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span className="flex items-center gap-1.5"><ListChecks className="w-4 h-4 text-blue-500"/> Множинний</span>
+                        <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{folderStats.multiple}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span className="flex items-center gap-1.5"><Link2 className="w-4 h-4 text-purple-500"/> Відповідність</span>
+                        <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{folderStats.matching}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span className="flex items-center gap-1.5"><ListOrdered className="w-4 h-4 text-amber-500"/> Послідовність</span>
+                        <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{folderStats.sequence}</span>
+                      </div>
+                      {folderStats.notebook > 0 && (
+                        <div className="flex justify-between items-center text-slate-600">
+                          <span className="flex items-center gap-1.5"><FileText className="w-4 h-4 text-slate-500"/> Зошит</span>
+                          <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{folderStats.notebook}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-slate-900 text-sm">
+                      <span>Всього:</span>
+                      <span className="text-teal-600 text-lg">{folderStats.total}</span>
+                    </div>
+                  </div>
+
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                     <div>
                       <button onClick={() => { setSelectedFolder(null); setExpandedQuestionId(null); }} className="text-teal-600 hover:underline text-xs font-bold mb-2 inline-block">← Моя Бібліотека</button>
@@ -676,46 +704,14 @@ export default function App() {
                   )}
                   {activeTab === 'community' && (<CommunitySearch tests={allPublicTests} query={communityQuery} onQueryChange={setCommunityQuery} onImport={importPublicTest} onAssign={(t: any) => setAssignSource(t)} onAddToBasket={addToBasket} onView={(t: any) => setViewingPublicTest(t)} />)}
                   
-                  {/* 🔥 ОНОВЛЕНА БІБЛІОТЕКА */}
                   {activeTab === 'library' && (
                     <div className="space-y-6 relative">
-                      
-                      {/* 🔥 Пункт 9: Плаваюча статистика */}
-                      <div className="hidden xl:block fixed right-6 top-28 w-60 bg-white rounded-2xl border border-slate-200 shadow-xl p-5 z-10">
-                        <h3 className="font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3 text-sm flex items-center gap-2">
-                          📊 Статистика питань
-                        </h3>
-                        <div className="space-y-3 text-xs">
-                          <div className="flex justify-between items-center text-slate-600">
-                            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/> Одна відп.</span>
-                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.single}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-slate-600">
-                            <span className="flex items-center gap-1.5"><ListChecks className="w-4 h-4 text-blue-500"/> Множинний</span>
-                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.multiple}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-slate-600">
-                            <span className="flex items-center gap-1.5"><Link2 className="w-4 h-4 text-purple-500"/> Відповідність</span>
-                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.matching}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-slate-600">
-                            <span className="flex items-center gap-1.5"><ListOrdered className="w-4 h-4 text-amber-500"/> Послідовність</span>
-                            <span className="font-bold text-slate-900 bg-slate-100 px-2 rounded-md">{libStats.sequence}</span>
-                          </div>
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-slate-900 text-sm">
-                          <span>Всього:</span>
-                          <span className="text-teal-600 text-lg">{libStats.total}</span>
-                        </div>
-                      </div>
-
                       <h2 className="text-2xl font-black text-slate-900">Моя Бібліотека</h2>
                       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                         <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-6 space-y-3 shadow-sm">
                           {libraryItems.map((item) => (
                             <div key={item.id} onClick={() => { setSelectedFolder(item); setExpandedQuestionId(null); }} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-200 transition cursor-pointer">
                               
-                              {/* ЛІВА ЧАСТИНА: Іконка + Назва (з редагуванням) */}
                               <div className="flex items-center space-x-3 min-w-0 flex-1">
                                 {item.type === 'group' ? (
                                   <span className="w-7 h-7 bg-emerald-500 text-white rounded-lg flex items-center justify-center text-[10px] font-black shadow-sm shrink-0">ЗНО</span>
@@ -744,11 +740,9 @@ export default function App() {
                                   </div>
                                 )}
                                 
-                                {/* Іконки типів питань */}
                                 {getQuestionTypeIcons(item.questions)}
                               </div>
 
-                              {/* ПРАВА ЧАСТИНА: Кнопки та статус */}
                               <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0 self-end sm:self-center">
                                 <button onClick={(e) => togglePublic(item.id, e)} title="Відкрити або закрити доступ для інших викладачів" className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition cursor-pointer ${item.isPublic ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-white text-slate-500 border-slate-200 hover:text-slate-800'}`}>{item.isPublic ? '🌐 Публічний' : '🔒 Приватний'}</button>
                                 {(item.questions?.length ?? 0) > 0 && (<PrintButton title={item.title} questions={item.questions ?? []} className="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-white text-slate-600 border-slate-200 hover:text-slate-900 transition cursor-pointer">📄 PDF</PrintButton>)}
@@ -787,7 +781,6 @@ export default function App() {
               onQuestionsChange={qs => setActiveSessions(prev => {
                 const updated = prev.map(x => (x.id === s.id ? { ...x, questions: qs } : x));
                 const sess = updated.find(x => x.id === s.id);
-                // 🔥 Додано ! після supabase
                 if (supabase && sess) {
                    supabase!.from('sessions').update({ data: sess }).eq('id', s.id).then();
                 }
@@ -809,7 +802,6 @@ export default function App() {
           
           setActiveSessions(prev => [newSess as any, ...prev]);
           
-          // 🔥 Додано ! після supabase
           if (supabase && currentUserId) {
             supabase!.from('sessions').insert({ 
               id: code, 
@@ -825,7 +817,6 @@ export default function App() {
         <EditSessionModal session={editingSession} onClose={() => setEditingSession(null)} onSave={(id, data) => { 
           setActiveSessions(prev => {
             const updated = prev.map(s => s.id === id ? { ...s, ...data } as SessionItem : s);
-            // 🔥 Додано ! після supabase
             if (supabase) {
                const sess = updated.find(s => s.id === id);
                if(sess) supabase!.from('sessions').update({ data: sess, title: sess.title }).eq('id', id).then();
@@ -838,7 +829,6 @@ export default function App() {
         <MeetingLinkModal session={editingMeetingSession} onClose={() => setEditingMeetingSession(null)} onSave={(id, url) => { 
           setActiveSessions(prev => {
             const updated = prev.map(s => s.id === id ? { ...s, meetingUrl: url } as SessionItem : s);
-            // 🔥 Додано ! після supabase
             if (supabase) {
                const sess = updated.find(s => s.id === id);
                if(sess) supabase!.from('sessions').update({ data: sess }).eq('id', id).then();
