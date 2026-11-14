@@ -5,7 +5,7 @@ import AssignModal from './AssignModal';
 import ShareModal from './ShareModal';
 import { copyText } from './ClassroomShared';
 import { maxPoints, type Question } from '../lib/nmt';
-import type { ClassItem } from '../lib/classroom'; // 🔥 Прибрано NewAssignment
+import type { ClassItem } from '../lib/classroom';
 import type { PublicTest } from '../lib/search';
 import { CheckCircle2, ListChecks, Link2, ListOrdered, FileText } from 'lucide-react';
 
@@ -21,7 +21,7 @@ type Props = {
   classes: ClassItem[];
   onClose: () => void;
   onQuestionsChange: (qs: Question[]) => void;
-  onAssign: (classId: string, data: any) => void; // 🔥 Замінено NewAssignment на any
+  onAssign: (classId: string, data: any) => void;
   onToggleStatus: () => void;
 };
 
@@ -75,7 +75,9 @@ export default function SessionBuilder({ session, classes, onClose, onQuestionsC
     setAssigning(true);
   };
 
-  const directLink = `${window.location.origin}/?join=${session.id}`;
+  // 🔥 ВИПРАВЛЕНО: Використовуємо фіксований публічний домен замість window.location.origin
+  // Це гарантує, що учні не потраплять на захищений preview-домен Vercel
+  const directLink = `https://nmt-sterenchuk.vercel.app/?join=${session.id}`;
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50">
