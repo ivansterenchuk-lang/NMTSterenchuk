@@ -67,9 +67,10 @@ export const generateCode = (prefix: string[] | string = 'CLS'): string => {
   return prefix + '-' + Math.floor(1000 + Math.random() * 9000);
 };
 
+// 🔥 ВИПРАВЛЕНО: Використовуємо фіксований публічний домен замість window.location.origin
 export const joinLink = (code: string): string => {
-  const baseUrl = window.location.origin + window.location.pathname;
-  return `${baseUrl}?join=${encodeURIComponent(code)}`;
+  const baseUrl = 'https://nmt-sterenchuk.vercel.app';
+  return `${baseUrl}/?join=${encodeURIComponent(code)}`;
 };
 
 export const allCodes = (classes: ClassItem[]): string[] => {

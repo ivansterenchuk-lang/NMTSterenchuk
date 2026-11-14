@@ -1,6 +1,7 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import TestPlayer from './TestPlayer';
 import type { Answer } from '../lib/nmt';
+import { supabase } from '../lib/supabase'; // 🔥 Імпорт supabase
 import {
   avgTwelve,
   extractCode,
@@ -18,7 +19,7 @@ import { GradeBadge, MyJournal, Stream, StatusPill, Tabs, type JournalEntry } fr
 import { useAccess } from './AccessUI';
 import { Lock, CheckCircle2, UserPlus, Info } from 'lucide-react';
 
-// ІМПОРТ ФУНКЦІЙ ДЛЯ БАЗИ ДАНИХ (КРИТИЧНО ВАЖЛИВО!)
+// ІМПОРТ ФУНКЦІЙ ДЛЯ БАЗИ ДАНИХ
 import { addStudentToClass, saveSubmissionToDb } from '../lib/classroomRepository';
 
 type Props = {
@@ -106,11 +107,9 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
   const [filter, setFilter] = useState<'all' | HwStatus>('all');
   const [testResult, setTestResult] = useState<TestResultData | null>(null);
 
-  // 🔥 ВИПРАВЛЕННЯ 1: Автоматичне підтягування коду класу з посилання (якщо joinCode змінюється)
+  // 🔥 Автоматичне підтягування коду класу з посилання
   useEffect(() => {
-    if (joinCode) {
-      setCodeInput(joinCode);
-    }
+    if (joinCode) setCodeInput(joinCode);
   }, [joinCode]);
 
   const safeClasses = classes || [];
@@ -118,7 +117,7 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
   
   const mine = safeClasses.filter(c => c.students?.some(s => s.id === safeStudent.id));
 
-  // НОВЕ: Розумне розпізнавання класу за кодом
+  // Розпізнавання класу за кодом
   const targetClass = safeClasses.find(x => x.code === extractCode(codeInput));
   const isAlreadyJoined = targetClass?.students?.some(s => s.id === safeStudent.id);
 
@@ -133,47 +132,76 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
 
   const countOf = (s: HwStatus) => allHw.filter(h => h.status === s).length;
 
-  // ОНОВЛЕНО: Приєднання до класу з збереженням у базу
+  // 🔥 ОНОВЛЕНО: Приєднання до класу з прямим запитом до бази
   const join = async () => {
     setJoinError('');
     const name = nameInput.trim();
+    const code = extractCode(codeInput);
+
     if (name.length < 2) {
       setJoinError('Вкажіть ім’я та прізвище.');
       return;
     }
-    if (!targetClass) {
+    if (!code) {
+      setJoinError('Введіть код класу.');
+      return;
+    }
+
+    let clsToJoin = targetClass;
+
+    // Якщо класу немає в локальному списку, шукаємо його напряму в Supabase
+    if (!clsToJoin) {
+      try {
+        // 🔥 ВИПРАВЛЕНО: Додано знак оклику ! після supabase
+        const { data } = await supabase!.from('classes').select('*').eq('code', code).maybeSingle();
+        if (data) {
+           // Якщо в базі дані лежать у колонці 'data'
+           clsToJoin = (data as any).data ? (data as any).data : (data as ClassItem);
+        }
+      } catch (e) {
+        console.error("Помилка пошуку класу:", e);
+      }
+    }
+
+    if (!clsToJoin) {
       setJoinError('Клас з таким кодом не знайдено. Перевірте код.');
       return;
     }
-    if (!isAlreadyJoined && !targetClass.acceptJoins) {
+    
+    const isJoined = clsToJoin.students?.some(s => s.id === safeStudent.id);
+    if (!isJoined && !clsToJoin.acceptJoins) {
       setJoinError('Вчитель тимчасово закрив набір до цього класу.');
       return;
     }
 
     onStudentNameChange(name);
     
-    // Оптимістичне оновлення UI
-    setClasses(prev =>
-      (prev || []).map(x =>
-        x.id !== targetClass.id
+    // Оновлюємо локальний UI
+    setClasses(prev => {
+      const exists = prev.some(c => c.id === clsToJoin!.id);
+      if (!exists) {
+        return [...prev, clsToJoin!]; // Додаємо новий клас
+      }
+      return prev.map(x =>
+        x.id !== clsToJoin!.id
           ? x
           : {
               ...x,
-              students: isAlreadyJoined
+              students: isJoined
                 ? (x.students || []).map(s => (s.id === safeStudent.id ? { ...s, name } : s))
                 : [...(x.students || []), { id: safeStudent.id, name }]
             }
-      )
-    );
+      );
+    });
 
     setCodeInput('');
     onJoinConsumed();
     setView('classes');
-    setOpenId(targetClass.id);
+    setOpenId(clsToJoin.id);
     setClassTab('work');
 
     // ЗБЕРЕЖЕННЯ В БАЗУ SUPABASE
-    await addStudentToClass(targetClass.id, safeStudent.id, name);
+    await addStudentToClass(clsToJoin.id, safeStudent.id, name);
   };
 
   const leaveClass = (c: ClassItem) => {
@@ -183,7 +211,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
     }
   };
 
-  // ОНОВЛЕНО: Збереження результатів у базу
   const submit = async (classId: string, a: Assignment, res: Finish) => {
     const late = !!a.due && new Date(a.due + 'T23:59:59') < new Date();
     
@@ -226,7 +253,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
       className: targetClass?.name || ''
     });
 
-    // ЗБЕРЕЖЕННЯ В БАЗУ SUPABASE
     await saveSubmissionToDb(a.id, safeStudent.id, safeStudent.name || 'Учень', res.total, res.max, res.items, res.answers, late);
   };
 
@@ -394,7 +420,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
     <>
       <div className="grid lg:grid-cols-[18rem_1fr] gap-6 items-start">
         <aside className="space-y-4 lg:sticky lg:top-6">
-          {/* ОНОВЛЕНИЙ БЛОК ПРИЄДНАННЯ */}
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-4 shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-widest text-amber-600">🔗 Приєднатися до класу</p>
             
@@ -414,7 +439,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
               />
             </div>
 
-            {/* ВІЗУАЛЬНЕ ПІДТВЕРДЖЕННЯ, ЩО КЛАС ЗНАЙДЕНО */}
             {targetClass && (
               <div className="bg-white border border-teal-200 rounded-xl p-3 flex items-start gap-2 shadow-sm animate-in fade-in zoom-in duration-200">
                 <Info className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
@@ -430,7 +454,6 @@ export default function StudentClasses({ classes, setClasses, student, onStudent
               <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5">{joinError}</p>
             )}
             
-            {/* 🔥 ВИПРАВЛЕННЯ 2: Кнопка активна, якщо введено ім'я та код, навіть якщо клас ще не підвантажився */}
             <button
               onClick={join}
               disabled={!nameInput.trim() || !codeInput.trim()}
